@@ -398,4 +398,86 @@ namespace mongo {
         int _type;
     };
 
+    /**
+     * Bitwise query operators include $bitsAllSet, $bitsAllClear, $bitsAnySet, and $bitsAnyClear.
+     */
+    class BitwiseMatchExpression: public LeafMatchExpression {
+    public:
+        BitwiseMatchExpression(MatchType type): LeafMatchExpression(type) {}
+        Status init(StringData path, const BSONArray& bitPositions);
+
+        virtual ~BitwiseMatchExpression() {}
+
+        virtual LeafMatchExpression* shallowClone() const;
+
+        virtual bool matchesSingleElement(const BSONElement& e) const;
+
+        virtual void debugString(StringBuilder& debug, int level) const;
+
+        virtual void toBSON(BSONObjBuilder* out) const;
+
+        virtual bool equivalent(const MatchExpression* other) const;
+
+        void copyTo(BitwiseMatchExpression* toFillIn) const;
+
+    private:
+        std::vector<unsigned int> _bitPositions;
+    };
+
+    /**
+     * BitwiseMatchExpression inheritors for the 4 bitwise query operators.
+     */
+
+    class BitsAllSetMatchExpression: public BitwiseMatchExpression {
+    public:
+        BitsAllSetMatchExpression(): BitwiseMatchExpression(BITS_ALL_SET) {}
+        virtual LeafMatchExpression* shallowClone() const {
+            BitwiseMatchExpression* e = new BitsAllSetMatchExpression();
+            e->init(path());
+            if (getTag()) {
+                e->setTag(getTag()->clone());
+            }
+            return e;
+        }
+    };
+
+    class BitsAllClearMatchExpression: public BitwiseMatchExpression {
+    public:
+        BitsAllClearMatchExpression(): BitwiseMatchExpression(BITS_ALL_CLEAR) {}
+        virtual LeafMatchExpression* shallowClone() const {
+            BitwiseMatchExpression* e = new BitsAllClearMatchExpression();
+            e->init(path());
+            if (getTag()) {
+                e->setTag(getTag()->clone());
+            }
+            return e;
+        }
+    };
+
+    class BitsAnySetMatchExpression: public BitwiseMatchExpression {
+    public:
+        BitsAnySetMatchExpression(): BitwiseMatchExpression(BITS_ANY_SET) {}
+        virtual LeafMatchExpression* shallowClone() const {
+            BitwiseMatchExpression* e = new BitsAnySetMatchExpression();
+            e->init(path());
+            if (getTag()) {
+                e->setTag(getTag()->clone());
+            }
+            return e;
+        }
+    };
+
+    class BitsAnyClearMatchExpression : public BitwiseMatchExpression {
+    public:
+        BitsAnyClearMatchExpression(): BitwiseMatchExpression(BITS_ANY_CLEAR) {}
+        virtual LeafMatchExpression* shallowClone() const {
+            BitwiseMatchExpression* e = new BitsAnyClearMatchExpression();
+            e->init(path());
+            if (getTag()) {
+                e->setTag(getTag()->clone());
+            }
+            return e;
+        }
+    };
+
 }  // namespace mongo

@@ -410,7 +410,7 @@ namespace mongo {
        ASSERT( MatchMatchExpression::PartialMatchResult_Unknown ==
        lt.matchesIndexKey( BSON( "" << 3 ), indexSpec ) );
        }
-    
+
        TEST( LtOp, MatchesIndexKeyArrayValue ) {
        BSONObj operand = BSON( "$lt" << 6 );
        LtOp lt;
@@ -728,7 +728,7 @@ namespace mongo {
        ASSERT( MatchMatchExpression::PartialMatchResult_Unknown ==
        gt.matchesIndexKey( BSON( "" << 8 ), indexSpec ) );
        }
-    
+
        TEST( GtOp, MatchesIndexKeyArrayValue ) {
        BSONObj operand = BSON( "$gt" << 6 );
        GtOp gt;
@@ -1616,7 +1616,7 @@ namespace mongo {
         ASSERT( MatchMatchExpression::PartialMatchResult_Unknown ==
                 in.matchesIndexKey( BSON( "" << 5 ), indexSpec ) );
     }
-    
+
     TEST( InMatchExpression, MatchesIndexKeyArrayValue ) {
         BSONObjBuilder inArray;
         inArray.append( "0", 4 ).append( "1", 5 ).appendRegex( "2", "abc", "" );
@@ -1652,4 +1652,15 @@ namespace mongo {
     }
     */
 
+    TEST(BitwiseMatchExpression, DoesNotMatchOther) {
+        BSONArray bitPositions = BSON_ARRAY(0 << 1 << 2 << 3);
+
+        BSONObj notMatch = BSON("a" << BSON());
+
+        BitsAllSetMatchExpression bas;
+        ASSERT_OK(bas.init("a", bitPositions));
+        // in.getArrayFilterEntries()->addEquality( operand.firstElement() );
+        // ASSERT( in.matchesSingleElement( match[ "a" ] ) );
+        // ASSERT( !in.matchesSingleElement( notMatch[ "a" ] ) );
+    }
 }

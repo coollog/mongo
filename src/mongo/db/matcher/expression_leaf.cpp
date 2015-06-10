@@ -603,6 +603,76 @@ namespace mongo {
         _arrayEntries.copyTo( toFillIn->_arrayEntries );
     }
 
+    // -----------
+
+    Status BitwiseMatchExpression::init(StringData path, const BSONArray& bitPositions) {
+        int bit;
+
+        // Convert BSONArray of bit positions to int vector
+        std::for_each(bitPositions.more(), false, [] (int &n) {
+            bit = bitPositions.next()._numberInt();
+            _bitPositions.push_back(bit);
+            cout << "GOT INTEGER " << bit;
+        });
+        return initPath(path);
+    }
+
+    bool BitwiseMatchExpression::matchesSingleElement(const BSONElement& e) const {
+        bool isNumber = false; // Whether e is a number or not (is binary data).
+
+        if (e.isNumber()) {
+            double eDouble = e.numberDouble();
+
+            // We only do integral doubles.
+            if (std::isnan(eDouble)) {
+                return false;
+            }
+            // This checks if e is an integral double.
+            // TODO: CHECK IF THIS WORKS
+            double intpart;
+            if (modf(eDouble, &intpart) != 0.0) {
+                return false;
+            }
+
+            // TODO: HAVE SOME FLAG TO USE LATER IN THE SWITCH
+            long long eValue = e.numberLong();
+            isNumber = true;
+        }
+        else if (e.type() == BinData) {
+            // If e is binary data, it is arbitrary length, so we use 64-bit vectors.
+
+            return false; // TODO: CHANGE THIS
+        } else {
+            // No filter match if any other data type.
+            return false;
+        }
+
+        // TODO: COMPLETE THIS CODE
+        switch (matchType()) {
+        case BITS_ALL_SET:
+            if (isNumber) {
+                for (unsigned i = 0; i < _bitPositions.size(); i++) {
+                    if (!(eValue & (1 << _bitPositions[i]))) {
+                        return false;
+                    }
+                }
+                return true;
+            }
+            return true; // TODO: REMOVE THIS
+
+        case BITS_ALL_CLEAR:
+            return true; // TODO: REMOVE THIS
+
+        case BITS_ANY_SET:
+            return true; // TODO: REMOVE THIS
+
+        case BITS_ANY_CLEAR:
+            return true; // TODO: REMOVE THIS
+
+        default:
+            // Call some fassertfailed
+        }
+
+        return false;
+    }
 }
-
-
