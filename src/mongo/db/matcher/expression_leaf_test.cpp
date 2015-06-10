@@ -1674,9 +1674,9 @@ namespace mongo {
 
         // BSONObj notMatch = BSON("a" << BSON());
 
-        BitwiseMatchExpression* bas = new BitsSetMatchExpression();
+        BitsSetMatchExpression bs;
 
-        ASSERT_OK(bas->init("a", bitPositions));
+        ASSERT_OK(bs.init("a", bitPositions));
         // in.getArrayFilterEntries()->addEquality( operand.firstElement() );
         // ASSERT( in.matchesSingleElement( match[ "a" ] ) );
         // ASSERT( !in.matchesSingleElement( notMatch[ "a" ] ) );

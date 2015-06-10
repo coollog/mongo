@@ -409,8 +409,6 @@ namespace mongo {
 
         virtual ~BitwiseMatchExpression() {}
 
-        virtual LeafMatchExpression* shallowClone() const;
-
         virtual bool matchesSingleElement(const BSONElement& e) const;
 
         virtual void debugString(StringBuilder& debug, int level) const {};
