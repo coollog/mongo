@@ -1662,7 +1662,6 @@ namespace mongo {
         while (sorted.more()) {
             bit = sorted.next()._numberInt();
             bitPositions->push_back(bit);
-            std::cout << "GOT INTEGER " << bit;
         };
 
         return *bitPositions.get();
@@ -1672,13 +1671,21 @@ namespace mongo {
         BSONArray ba = BSON_ARRAY(0 << 1 << 2 << 3);
         std::vector<unsigned int> bitPositions = BSONArrayToBitPositions(ba);
 
-        // BSONObj notMatch = BSON("a" << BSON());
+        BSONObj notMatch1 = fromjson("{a: {}}"), // Object
+                notMatch2 = fromjson("{a: null}"), // Null
+                notMatch3 = fromjson("{a: []}"), // Array
+                notMatch4 = fromjson("{a: true}"), // Boolean
+                notMatch5 = fromjson("{a: ''}"), // String
+                notMatch6 = fromjson("{a: 5.5}"); // Non-integral Double
 
         BitsSetMatchExpression bs;
 
         ASSERT_OK(bs.init("a", bitPositions));
-        // in.getArrayFilterEntries()->addEquality( operand.firstElement() );
-        // ASSERT( in.matchesSingleElement( match[ "a" ] ) );
-        // ASSERT( !in.matchesSingleElement( notMatch[ "a" ] ) );
+        ASSERT(!bs.matchesSingleElement(notMatch1["a"]));
+        ASSERT(!bs.matchesSingleElement(notMatch2["a"]));
+        ASSERT(!bs.matchesSingleElement(notMatch3["a"]));
+        ASSERT(!bs.matchesSingleElement(notMatch4["a"]));
+        ASSERT(!bs.matchesSingleElement(notMatch5["a"]));
+        ASSERT(!bs.matchesSingleElement(notMatch6["a"]));
     }
 }
