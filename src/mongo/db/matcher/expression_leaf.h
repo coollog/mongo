@@ -417,6 +417,8 @@ namespace mongo {
 
         virtual bool equivalent(const MatchExpression* other) const { return true; };
 
+        size_t bitPositionsCount() const { return _bitPositions.size(); }
+
     protected:
         std::vector<unsigned int> _bitPositions;
     };

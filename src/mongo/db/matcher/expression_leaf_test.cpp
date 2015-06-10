@@ -1652,40 +1652,124 @@ namespace mongo {
     }
     */
 
-    const std::vector<unsigned int>& BSONArrayToBitPositions(const BSONArray& ba) {
+    std::vector<unsigned int> BSONArrayToBitPositions(const BSONArray& ba) {
         int bit;
-        std::unique_ptr<std::vector<unsigned int>> bitPositions(new std::vector<unsigned int>);
+        std::vector<unsigned int> bitPositions;
 
         BSONArrayIteratorSorted sorted(ba);
 
         // Convert BSONArray of bit positions to int vector
         while (sorted.more()) {
             bit = sorted.next()._numberInt();
-            bitPositions->push_back(bit);
+            bitPositions.push_back(bit);
         };
 
-        return *bitPositions.get();
+        return bitPositions;
     }
 
     TEST(BitwiseMatchExpression, DoesNotMatchOther) {
-        BSONArray ba = BSON_ARRAY(0 << 1 << 2 << 3);
-        std::vector<unsigned int> bitPositions = BSONArrayToBitPositions(ba);
+        std::vector<unsigned int> bitPositions;
 
-        BSONObj notMatch1 = fromjson("{a: {}}"), // Object
-                notMatch2 = fromjson("{a: null}"), // Null
-                notMatch3 = fromjson("{a: []}"), // Array
-                notMatch4 = fromjson("{a: true}"), // Boolean
-                notMatch5 = fromjson("{a: ''}"), // String
-                notMatch6 = fromjson("{a: 5.5}"); // Non-integral Double
+        BSONObj notMatch1 = fromjson("{a: {}}"); // Object
+        BSONObj notMatch2 = fromjson("{a: null}"); // Null
+        BSONObj notMatch3 = fromjson("{a: []}"); // Array
+        BSONObj notMatch4 = fromjson("{a: true}"); // Boolean
+        BSONObj notMatch5 = fromjson("{a: ''}"); // String
+        BSONObj notMatch6 = fromjson("{a: 5.5}"); // Non-integral Double
 
         BitsSetMatchExpression bs;
+        BitsClearMatchExpression bc;
 
         ASSERT_OK(bs.init("a", bitPositions));
+        ASSERT_OK(bc.init("a", bitPositions));
+        ASSERT_EQ((size_t)0, bs.bitPositionsCount());
+        ASSERT_EQ((size_t)0, bc.bitPositionsCount());
         ASSERT(!bs.matchesSingleElement(notMatch1["a"]));
         ASSERT(!bs.matchesSingleElement(notMatch2["a"]));
         ASSERT(!bs.matchesSingleElement(notMatch3["a"]));
         ASSERT(!bs.matchesSingleElement(notMatch4["a"]));
         ASSERT(!bs.matchesSingleElement(notMatch5["a"]));
         ASSERT(!bs.matchesSingleElement(notMatch6["a"]));
+        ASSERT(!bc.matchesSingleElement(notMatch1["a"]));
+        ASSERT(!bc.matchesSingleElement(notMatch2["a"]));
+        ASSERT(!bc.matchesSingleElement(notMatch3["a"]));
+        ASSERT(!bc.matchesSingleElement(notMatch4["a"]));
+        ASSERT(!bc.matchesSingleElement(notMatch5["a"]));
+        ASSERT(!bc.matchesSingleElement(notMatch6["a"]));
+    }
+
+    TEST(BitwiseMatchExpression, MatchesEmpty) {
+        std::vector<unsigned int> bitPositions;
+
+        BSONObj match1 = fromjson("{a: NumberInt(54)}");
+        BSONObj match2 = fromjson("{a: NumberLong(54)}");
+        BSONObj match3 = fromjson("{a: 54.0}");
+        BSONObj match4 = fromjson("{a: {$binary: 'AAAAAAAAAAAAAAAAAAAAAAAAAAA2', $type: '00'}}");
+
+        BitsSetMatchExpression bs;
+        BitsClearMatchExpression bc;
+
+        ASSERT_OK(bs.init("a", bitPositions));
+        ASSERT_OK(bc.init("a", bitPositions));
+        ASSERT_EQ((size_t)0, bs.bitPositionsCount());
+        ASSERT_EQ((size_t)0, bc.bitPositionsCount());
+        ASSERT(bs.matchesSingleElement(match1["a"]));
+        ASSERT(bs.matchesSingleElement(match2["a"]));
+        ASSERT(bs.matchesSingleElement(match3["a"]));
+        ASSERT(bs.matchesSingleElement(match4["a"]));
+        ASSERT(bc.matchesSingleElement(match1["a"]));
+        ASSERT(bc.matchesSingleElement(match2["a"]));
+        ASSERT(bc.matchesSingleElement(match3["a"]));
+        ASSERT(bc.matchesSingleElement(match4["a"]));
+    }
+
+    TEST(BitwiseMatchExpression, MatchesInteger) {
+        BSONArray bas = BSON_ARRAY(1 << 2 << 4 << 5);
+        BSONArray bac = BSON_ARRAY(0 << 3 << 600);
+        std::vector<unsigned int> bitPositionsSet = BSONArrayToBitPositions(bas);
+        std::vector<unsigned int> bitPositionsClear = BSONArrayToBitPositions(bac);
+
+        BSONObj match1 = fromjson("{a: NumberInt(54)}");
+        BSONObj match2 = fromjson("{a: NumberLong(54)}");
+        BSONObj match3 = fromjson("{a: 54.0}");
+
+        BitsSetMatchExpression bs;
+        BitsClearMatchExpression bc;
+
+        ASSERT_OK(bs.init("a", bitPositionsSet));
+        ASSERT_OK(bc.init("a", bitPositionsClear));
+        ASSERT_EQ((size_t)4, bs.bitPositionsCount());
+        ASSERT_EQ((size_t)3, bc.bitPositionsCount());
+        ASSERT(bs.matchesSingleElement(match1["a"]));
+        ASSERT(bs.matchesSingleElement(match2["a"]));
+        ASSERT(bs.matchesSingleElement(match3["a"]));
+        ASSERT(bc.matchesSingleElement(match1["a"]));
+        ASSERT(bc.matchesSingleElement(match2["a"]));
+        ASSERT(bc.matchesSingleElement(match3["a"]));
+    }
+
+    TEST(BitwiseMatchExpression, DoesNotMatchInteger) {
+        BSONArray bas = BSON_ARRAY(1 << 2 << 4 << 5 << 6);
+        BSONArray bac = BSON_ARRAY(0 << 3 << 1);
+        std::vector<unsigned int> bitPositionsSet = BSONArrayToBitPositions(bas);
+        std::vector<unsigned int> bitPositionsClear = BSONArrayToBitPositions(bac);
+
+        BSONObj match1 = fromjson("{a: NumberInt(54)}");
+        BSONObj match2 = fromjson("{a: NumberLong(54)}");
+        BSONObj match3 = fromjson("{a: 54.0}");
+
+        BitsSetMatchExpression bs;
+        BitsClearMatchExpression bc;
+
+        ASSERT_OK(bs.init("a", bitPositionsSet));
+        ASSERT_OK(bc.init("a", bitPositionsClear));
+        ASSERT_EQ((size_t)5, bs.bitPositionsCount());
+        ASSERT_EQ((size_t)3, bc.bitPositionsCount());
+        ASSERT(!bs.matchesSingleElement(match1["a"]));
+        ASSERT(!bs.matchesSingleElement(match2["a"]));
+        ASSERT(!bs.matchesSingleElement(match3["a"]));
+        ASSERT(!bc.matchesSingleElement(match1["a"]));
+        ASSERT(!bc.matchesSingleElement(match2["a"]));
+        ASSERT(!bc.matchesSingleElement(match3["a"]));
     }
 }

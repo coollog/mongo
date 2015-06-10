@@ -611,7 +611,8 @@ namespace mongo {
 
     bool BitwiseMatchExpression::matchesSingleElement(const BSONElement& e) const {
         bool isNumber = false; // Whether e is a number or not (is binary data).
-        long long eValue;
+        long long eValue; // Integral value of element.
+        // const char* eBinary; // Binary value of element.
 
         if (e.isNumber()) {
             double eDouble = e.numberDouble();
@@ -626,38 +627,63 @@ namespace mongo {
             if (modf(eDouble, &intpart) != 0.0) {
                 return false;
             }
-
-            // TODO: HAVE SOME FLAG TO USE LATER IN THE SWITCH
             eValue = e.numberLong();
             isNumber = true;
         }
-        else if (e.type() == BinData) {
+        else if (e.type() == BinData || e.type() == jstOID) {
             // If e is binary data, it is arbitrary length, so we use 64-bit vectors.
-
-            return false; // TODO: CHANGE THIS
-        } else {
+            return true; // TODO: CHANGE THIS
+        }
+        else if (e.type() == Date) {
+            // If e is a Date or Timestamp
+            eValue = e.date().toMillisSinceEpoch();
+            isNumber = true;
+        }
+        else {
             // No filter match if any other data type.
             return false;
         }
 
         // TODO: COMPLETE THIS CODE
-        switch (matchType()) {
+        MatchType mt = matchType();
+        switch (mt) {
         case BITS_SET:
+        case BITS_CLEAR:
             if (isNumber) {
+                // Check each bit position.
                 for (unsigned i = 0; i < _bitPositions.size(); i++) {
-                    if (!(eValue & (1 << _bitPositions[i]))) {
-                        return false;
+                    if (mt == BITS_SET) {
+                        if (_bitPositions[i] >= 64) {
+                            // Cannot check for more than 64-bits.
+                            return false;
+                        }
+                        if (!(eValue & (1 << _bitPositions[i]))) {
+                            // If bit is not set, return false.
+                            return false;
+                        }
+                    }
+                    else if (mt == BITS_CLEAR) {
+                        if (_bitPositions[i] >= 64) {
+                            // Assume to be zero.
+                            continue;
+                        }
+                        if (eValue & (1 << _bitPositions[i])) {
+                            // If bit is set, return false.
+                            return false;
+                        }
                     }
                 }
+                // All bits passed.
                 return true;
             }
-            return true; // TODO: REMOVE THIS
+            else {
+                // Map to byte position and bit position within that byte
 
-        case BITS_CLEAR:
-            return true; // TODO: REMOVE THIS
+                return true;
+            }
 
         default:
-            // TODO: Call some fassertfailed
+            // TODO: Call some fassertfailed on unexpected MatchType
             return false;
         }
     }
