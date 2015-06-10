@@ -1652,13 +1652,31 @@ namespace mongo {
     }
     */
 
+    const std::vector<unsigned int>& BSONArrayToBitPositions(const BSONArray& ba) {
+        int bit;
+        std::unique_ptr<std::vector<unsigned int>> bitPositions(new std::vector<unsigned int>);
+
+        BSONArrayIteratorSorted sorted(ba);
+
+        // Convert BSONArray of bit positions to int vector
+        while (sorted.more()) {
+            bit = sorted.next()._numberInt();
+            bitPositions->push_back(bit);
+            std::cout << "GOT INTEGER " << bit;
+        };
+
+        return *bitPositions.get();
+    }
+
     TEST(BitwiseMatchExpression, DoesNotMatchOther) {
-        BSONArray bitPositions = BSON_ARRAY(0 << 1 << 2 << 3);
+        BSONArray ba = BSON_ARRAY(0 << 1 << 2 << 3);
+        std::vector<unsigned int> bitPositions = BSONArrayToBitPositions(ba);
 
-        BSONObj notMatch = BSON("a" << BSON());
+        // BSONObj notMatch = BSON("a" << BSON());
 
-        BitsAllSetMatchExpression bas;
-        ASSERT_OK(bas.init("a", bitPositions));
+        BitwiseMatchExpression* bas = new BitsSetMatchExpression();
+
+        ASSERT_OK(bas->init("a", bitPositions));
         // in.getArrayFilterEntries()->addEquality( operand.firstElement() );
         // ASSERT( in.matchesSingleElement( match[ "a" ] ) );
         // ASSERT( !in.matchesSingleElement( notMatch[ "a" ] ) );

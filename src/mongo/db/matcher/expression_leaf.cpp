@@ -604,21 +604,14 @@ namespace mongo {
     }
 
     // -----------
-
-    Status BitwiseMatchExpression::init(StringData path, const BSONArray& bitPositions) {
-        int bit;
-
-        // Convert BSONArray of bit positions to int vector
-        std::for_each(bitPositions.more(), false, [] (int &n) {
-            bit = bitPositions.next()._numberInt();
-            _bitPositions.push_back(bit);
-            cout << "GOT INTEGER " << bit;
-        });
+    Status BitwiseMatchExpression::init(StringData path, const std::vector<unsigned int>& bitPositions) {
+        _bitPositions = bitPositions;
         return initPath(path);
     }
 
     bool BitwiseMatchExpression::matchesSingleElement(const BSONElement& e) const {
         bool isNumber = false; // Whether e is a number or not (is binary data).
+        long long eValue;
 
         if (e.isNumber()) {
             double eDouble = e.numberDouble();
@@ -635,7 +628,7 @@ namespace mongo {
             }
 
             // TODO: HAVE SOME FLAG TO USE LATER IN THE SWITCH
-            long long eValue = e.numberLong();
+            eValue = e.numberLong();
             isNumber = true;
         }
         else if (e.type() == BinData) {
@@ -649,7 +642,7 @@ namespace mongo {
 
         // TODO: COMPLETE THIS CODE
         switch (matchType()) {
-        case BITS_ALL_SET:
+        case BITS_SET:
             if (isNumber) {
                 for (unsigned i = 0; i < _bitPositions.size(); i++) {
                     if (!(eValue & (1 << _bitPositions[i]))) {
@@ -660,19 +653,41 @@ namespace mongo {
             }
             return true; // TODO: REMOVE THIS
 
-        case BITS_ALL_CLEAR:
-            return true; // TODO: REMOVE THIS
-
-        case BITS_ANY_SET:
-            return true; // TODO: REMOVE THIS
-
-        case BITS_ANY_CLEAR:
+        case BITS_CLEAR:
             return true; // TODO: REMOVE THIS
 
         default:
-            // Call some fassertfailed
+            // TODO: Call some fassertfailed
+            return false;
         }
-
-        return false;
     }
+
+    // void BitwiseMatchExpression::debugString( StringBuilder& debug, int level ) const {
+    //     // _debugAddSpace( debug, level );
+    //     // debug << path() << " $in ";
+    //     // _arrayEntries.debugString(debug);
+    //     // MatchExpression::TagData* td = getTag();
+    //     // if (NULL != td) {
+    //     //     debug << " ";
+    //     //     td->debugString(&debug);
+    //     // }
+    //     // debug << "\n";
+    // }
+
+    // void BitwiseMatchExpression::toBSON(BSONObjBuilder* out) const {
+    //     // BSONObjBuilder inBob(out->subobjStart(path()));
+    //     // BSONArrayBuilder arrBob(inBob.subarrayStart("$in"));
+    //     // _arrayEntries.toBSON(&arrBob);
+    //     // inBob.doneFast();
+    // }
+
+    // bool BitwiseMatchExpression::equivalent( const MatchExpression* other ) const {
+    //     // if ( matchType() != other->matchType() )
+    //     //     return false;
+    //     // const BitwiseMatchExpression* realOther = static_cast<const BitwiseMatchExpression*>( other );
+    //     // return
+    //     //     path() == realOther->path() &&
+    //     //     _arrayEntries.equivalent( realOther->_arrayEntries );
+    //     return true;
+    // }
 }

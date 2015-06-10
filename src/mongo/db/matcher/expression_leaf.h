@@ -404,7 +404,8 @@ namespace mongo {
     class BitwiseMatchExpression: public LeafMatchExpression {
     public:
         BitwiseMatchExpression(MatchType type): LeafMatchExpression(type) {}
-        Status init(StringData path, const BSONArray& bitPositions);
+
+        Status init(StringData path, const std::vector<unsigned int>& bitPositions);
 
         virtual ~BitwiseMatchExpression() {}
 
@@ -412,15 +413,13 @@ namespace mongo {
 
         virtual bool matchesSingleElement(const BSONElement& e) const;
 
-        virtual void debugString(StringBuilder& debug, int level) const;
+        virtual void debugString(StringBuilder& debug, int level) const {};
 
-        virtual void toBSON(BSONObjBuilder* out) const;
+        virtual void toBSON(BSONObjBuilder* out) const {};
 
-        virtual bool equivalent(const MatchExpression* other) const;
+        virtual bool equivalent(const MatchExpression* other) const { return true; };
 
-        void copyTo(BitwiseMatchExpression* toFillIn) const;
-
-    private:
+    protected:
         std::vector<unsigned int> _bitPositions;
     };
 
@@ -428,12 +427,12 @@ namespace mongo {
      * BitwiseMatchExpression inheritors for the 4 bitwise query operators.
      */
 
-    class BitsAllSetMatchExpression: public BitwiseMatchExpression {
+    class BitsSetMatchExpression: public BitwiseMatchExpression {
     public:
-        BitsAllSetMatchExpression(): BitwiseMatchExpression(BITS_ALL_SET) {}
+        BitsSetMatchExpression(): BitwiseMatchExpression(BITS_SET) {}
         virtual LeafMatchExpression* shallowClone() const {
-            BitwiseMatchExpression* e = new BitsAllSetMatchExpression();
-            e->init(path());
+            BitwiseMatchExpression* e = new BitsSetMatchExpression();
+            e->init(path(), _bitPositions);
             if (getTag()) {
                 e->setTag(getTag()->clone());
             }
@@ -441,38 +440,12 @@ namespace mongo {
         }
     };
 
-    class BitsAllClearMatchExpression: public BitwiseMatchExpression {
+    class BitsClearMatchExpression: public BitwiseMatchExpression {
     public:
-        BitsAllClearMatchExpression(): BitwiseMatchExpression(BITS_ALL_CLEAR) {}
+        BitsClearMatchExpression(): BitwiseMatchExpression(BITS_CLEAR) {}
         virtual LeafMatchExpression* shallowClone() const {
-            BitwiseMatchExpression* e = new BitsAllClearMatchExpression();
-            e->init(path());
-            if (getTag()) {
-                e->setTag(getTag()->clone());
-            }
-            return e;
-        }
-    };
-
-    class BitsAnySetMatchExpression: public BitwiseMatchExpression {
-    public:
-        BitsAnySetMatchExpression(): BitwiseMatchExpression(BITS_ANY_SET) {}
-        virtual LeafMatchExpression* shallowClone() const {
-            BitwiseMatchExpression* e = new BitsAnySetMatchExpression();
-            e->init(path());
-            if (getTag()) {
-                e->setTag(getTag()->clone());
-            }
-            return e;
-        }
-    };
-
-    class BitsAnyClearMatchExpression : public BitwiseMatchExpression {
-    public:
-        BitsAnyClearMatchExpression(): BitwiseMatchExpression(BITS_ANY_CLEAR) {}
-        virtual LeafMatchExpression* shallowClone() const {
-            BitwiseMatchExpression* e = new BitsAnyClearMatchExpression();
-            e->init(path());
+            BitwiseMatchExpression* e = new BitsClearMatchExpression();
+            e->init(path(), _bitPositions);
             if (getTag()) {
                 e->setTag(getTag()->clone());
             }

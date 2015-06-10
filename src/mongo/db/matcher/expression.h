@@ -53,7 +53,7 @@ namespace mongo {
             ELEM_MATCH_OBJECT, ELEM_MATCH_VALUE, SIZE,
 
             // leaf types
-            EQ, LTE, LT, GT, GTE, REGEX, MOD, EXISTS, MATCH_IN,
+            EQ, LTE, LT, GT, GTE, REGEX, MOD, EXISTS, MATCH_IN, BITS_SET, BITS_CLEAR,
 
             // Negations.
             NOT, NOR,
