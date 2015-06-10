@@ -64,6 +64,112 @@ TEST(MatchExpressionParserTest, Multiple1) {
     delete result.getValue();
 }
 
+TEST(MatchExpressionParserTest, BitTestMatchExpressionValid) {
+    ASSERT_OK(MatchExpressionParser::parse(BSON("a" << BSON("$bitsAllSet" << LLONG_MIN))));
+    ASSERT_OK(MatchExpressionParser::parse(BSON("a" << BSON("$bitsAllSet" << 54))));
+    ASSERT_OK(MatchExpressionParser::parse(BSON("a" << BSON("$bitsAllSet" << LLONG_MAX))));
+    ASSERT_OK(MatchExpressionParser::parse(BSON("a" << BSON("$bitsAllSet" << BSON_ARRAY(0)))));
+    ASSERT_OK(MatchExpressionParser::parse(
+        BSON("a" << BSON("$bitsAllSet" << BSON_ARRAY(0 << 1 << 2 << 3)))));
+    ASSERT_OK(
+        MatchExpressionParser::parse(BSON("a" << BSON("$bitsAllSet" << BSON_ARRAY(INT_MAX)))));
+    ASSERT_OK(MatchExpressionParser::parse(
+        fromjson("{a: {$bitsAllSet: {$binary: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAA', $type: '00'}}}")));
+    ASSERT_OK(MatchExpressionParser::parse(BSON("a" << BSON("$bitsAllClear" << LLONG_MIN))));
+    ASSERT_OK(MatchExpressionParser::parse(BSON("a" << BSON("$bitsAllClear" << 54))));
+    ASSERT_OK(MatchExpressionParser::parse(BSON("a" << BSON("$bitsAllClear" << LLONG_MAX))));
+    ASSERT_OK(MatchExpressionParser::parse(BSON("a" << BSON("$bitsAllClear" << BSON_ARRAY(0)))));
+    ASSERT_OK(MatchExpressionParser::parse(
+        BSON("a" << BSON("$bitsAllClear" << BSON_ARRAY(0 << 1 << 2 << 3)))));
+    ASSERT_OK(
+        MatchExpressionParser::parse(BSON("a" << BSON("$bitsAllClear" << BSON_ARRAY(INT_MAX)))));
+    ASSERT_OK(MatchExpressionParser::parse(
+        fromjson("{a: {$bitsAllClear: {$binary: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAA', $type: '00'}}}")));
+    ASSERT_OK(MatchExpressionParser::parse(BSON("a" << BSON("$bitsAnySet" << LLONG_MIN))));
+    ASSERT_OK(MatchExpressionParser::parse(BSON("a" << BSON("$bitsAnySet" << 54))));
+    ASSERT_OK(MatchExpressionParser::parse(BSON("a" << BSON("$bitsAnySet" << LLONG_MAX))));
+    ASSERT_OK(MatchExpressionParser::parse(BSON("a" << BSON("$bitsAnySet" << BSON_ARRAY(0)))));
+    ASSERT_OK(MatchExpressionParser::parse(
+        BSON("a" << BSON("$bitsAnySet" << BSON_ARRAY(0 << 1 << 2 << 3)))));
+    ASSERT_OK(
+        MatchExpressionParser::parse(BSON("a" << BSON("$bitsAnySet" << BSON_ARRAY(INT_MAX)))));
+    ASSERT_OK(MatchExpressionParser::parse(
+        fromjson("{a: {$bitsAnySet: {$binary: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAA', $type: '00'}}}")));
+    ASSERT_OK(MatchExpressionParser::parse(BSON("a" << BSON("$bitsAnyClear" << LLONG_MIN))));
+    ASSERT_OK(MatchExpressionParser::parse(BSON("a" << BSON("$bitsAnyClear" << 54))));
+    ASSERT_OK(MatchExpressionParser::parse(BSON("a" << BSON("$bitsAnyClear" << LLONG_MAX))));
+    ASSERT_OK(MatchExpressionParser::parse(BSON("a" << BSON("$bitsAnyClear" << BSON_ARRAY(0)))));
+    ASSERT_OK(MatchExpressionParser::parse(
+        BSON("a" << BSON("$bitsAnyClear" << BSON_ARRAY(0 << 1 << 2 << 3)))));
+    ASSERT_OK(
+        MatchExpressionParser::parse(BSON("a" << BSON("$bitsAnyClear" << BSON_ARRAY(INT_MAX)))));
+    ASSERT_OK(MatchExpressionParser::parse(
+        fromjson("{a: {$bitsAnyClear: {$binary: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAA', $type: '00'}}}")));
+}
+
+TEST(MatchExpressionParserTest, BitTestMatchExpressionInvalid) {
+    ASSERT_NOT_OK(MatchExpressionParser::parse(fromjson("{a: {$bitsAllSet: null}}")));
+    ASSERT_NOT_OK(MatchExpressionParser::parse(fromjson("{a: {$bitsAllSet: true}}")));
+    ASSERT_NOT_OK(MatchExpressionParser::parse(fromjson("{a: {$bitsAllSet: {}}}")));
+    ASSERT_NOT_OK(MatchExpressionParser::parse(fromjson("{a: {$bitsAllSet: ''}}")));
+    ASSERT_NOT_OK(MatchExpressionParser::parse(
+        fromjson("{a: {$bitsAllSet: ObjectId('000000000000000000000000')}}")));
+    ASSERT_NOT_OK(MatchExpressionParser::parse(fromjson("{a: {$bitsAllSet: [null]}}")));
+    ASSERT_NOT_OK(MatchExpressionParser::parse(fromjson("{a: {$bitsAllSet: [true]}}")));
+    ASSERT_NOT_OK(MatchExpressionParser::parse(fromjson("{a: {$bitsAllSet: ['']}}")));
+    ASSERT_NOT_OK(MatchExpressionParser::parse(fromjson("{a: {$bitsAllSet: [{}]}}")));
+    ASSERT_NOT_OK(MatchExpressionParser::parse(fromjson("{a: {$bitsAllSet: [[]]}}")));
+    ASSERT_NOT_OK(MatchExpressionParser::parse(fromjson("{a: {$bitsAllSet: [-1]}}")));
+    ASSERT_NOT_OK(MatchExpressionParser::parse(fromjson("{a: {$bitsAllSet: [2.5]}}")));
+    ASSERT_NOT_OK(MatchExpressionParser::parse(
+        fromjson("{a: {$bitsAllSet: [{$binary: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAA', $type: '00'}]}}")));
+    ASSERT_NOT_OK(MatchExpressionParser::parse(fromjson("{a: {$bitsAllClear: null}}")));
+    ASSERT_NOT_OK(MatchExpressionParser::parse(fromjson("{a: {$bitsAllClear: true}}")));
+    ASSERT_NOT_OK(MatchExpressionParser::parse(fromjson("{a: {$bitsAllClear: {}}}")));
+    ASSERT_NOT_OK(MatchExpressionParser::parse(fromjson("{a: {$bitsAllClear: ''}}")));
+    ASSERT_NOT_OK(MatchExpressionParser::parse(
+        fromjson("{a: {$bitsAllClear: ObjectId('000000000000000000000000')}}")));
+    ASSERT_NOT_OK(MatchExpressionParser::parse(fromjson("{a: {$bitsAllClear: [null]}}")));
+    ASSERT_NOT_OK(MatchExpressionParser::parse(fromjson("{a: {$bitsAllClear: [true]}}")));
+    ASSERT_NOT_OK(MatchExpressionParser::parse(fromjson("{a: {$bitsAllClear: ['']}}")));
+    ASSERT_NOT_OK(MatchExpressionParser::parse(fromjson("{a: {$bitsAllClear: [{}]}}")));
+    ASSERT_NOT_OK(MatchExpressionParser::parse(fromjson("{a: {$bitsAllClear: [[]]}}")));
+    ASSERT_NOT_OK(MatchExpressionParser::parse(fromjson("{a: {$bitsAllClear: [-1]}}")));
+    ASSERT_NOT_OK(MatchExpressionParser::parse(fromjson("{a: {$bitsAllClear: [2.5]}}")));
+    ASSERT_NOT_OK(MatchExpressionParser::parse(fromjson(
+        "{a: {$bitsAllClear: [{$binary: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAA', $type: '00'}]}}")));
+    ASSERT_NOT_OK(MatchExpressionParser::parse(fromjson("{a: {$bitsAnySet: null}}")));
+    ASSERT_NOT_OK(MatchExpressionParser::parse(fromjson("{a: {$bitsAnySet: true}}")));
+    ASSERT_NOT_OK(MatchExpressionParser::parse(fromjson("{a: {$bitsAnySet: {}}}")));
+    ASSERT_NOT_OK(MatchExpressionParser::parse(fromjson("{a: {$bitsAnySet: ''}}")));
+    ASSERT_NOT_OK(MatchExpressionParser::parse(
+        fromjson("{a: {$bitsAnySet: ObjectId('000000000000000000000000')}}")));
+    ASSERT_NOT_OK(MatchExpressionParser::parse(fromjson("{a: {$bitsAnySet: [null]}}")));
+    ASSERT_NOT_OK(MatchExpressionParser::parse(fromjson("{a: {$bitsAnySet: [true]}}")));
+    ASSERT_NOT_OK(MatchExpressionParser::parse(fromjson("{a: {$bitsAnySet: ['']}}")));
+    ASSERT_NOT_OK(MatchExpressionParser::parse(fromjson("{a: {$bitsAnySet: [{}]}}")));
+    ASSERT_NOT_OK(MatchExpressionParser::parse(fromjson("{a: {$bitsAnySet: [[]]}}")));
+    ASSERT_NOT_OK(MatchExpressionParser::parse(fromjson("{a: {$bitsAnySet: [-1]}}")));
+    ASSERT_NOT_OK(MatchExpressionParser::parse(fromjson("{a: {$bitsAnySet: [2.5]}}")));
+    ASSERT_NOT_OK(MatchExpressionParser::parse(
+        fromjson("{a: {$bitsAnySet: [{$binary: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAA', $type: '00'}]}}")));
+    ASSERT_NOT_OK(MatchExpressionParser::parse(fromjson("{a: {$bitsAnyClear: null}}")));
+    ASSERT_NOT_OK(MatchExpressionParser::parse(fromjson("{a: {$bitsAnyClear: true}}")));
+    ASSERT_NOT_OK(MatchExpressionParser::parse(fromjson("{a: {$bitsAnyClear: {}}}")));
+    ASSERT_NOT_OK(MatchExpressionParser::parse(fromjson("{a: {$bitsAnyClear: ''}}")));
+    ASSERT_NOT_OK(MatchExpressionParser::parse(
+        fromjson("{a: {$bitsAnyClear: ObjectId('000000000000000000000000')}}")));
+    ASSERT_NOT_OK(MatchExpressionParser::parse(fromjson("{a: {$bitsAnyClear: [null]}}")));
+    ASSERT_NOT_OK(MatchExpressionParser::parse(fromjson("{a: {$bitsAnyClear: [true]}}")));
+    ASSERT_NOT_OK(MatchExpressionParser::parse(fromjson("{a: {$bitsAnyClear: ['']}}")));
+    ASSERT_NOT_OK(MatchExpressionParser::parse(fromjson("{a: {$bitsAnyClear: [{}]}}")));
+    ASSERT_NOT_OK(MatchExpressionParser::parse(fromjson("{a: {$bitsAnyClear: [[]]}}")));
+    ASSERT_NOT_OK(MatchExpressionParser::parse(fromjson("{a: {$bitsAnyClear: [-1]}}")));
+    ASSERT_NOT_OK(MatchExpressionParser::parse(fromjson("{a: {$bitsAnyClear: [2.5]}}")));
+    ASSERT_NOT_OK(MatchExpressionParser::parse(fromjson(
+        "{a: {$bitsAnyClear: [{$binary: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAA', $type: '00'}]}}")));
+}
+
 TEST(AtomicMatchExpressionTest, Simple1) {
     BSONObj query = BSON("x" << 5 << "$atomic" << BSON("$gt" << 5 << "$lt" << 8));
     StatusWithMatchExpression result = MatchExpressionParser::parse(query);

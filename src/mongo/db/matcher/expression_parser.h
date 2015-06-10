@@ -146,6 +146,18 @@ private:
 
     StatusWithMatchExpression _parseNot(const char* name, const BSONElement& e, int level);
 
+    /**
+     * Parses 'e' into a BitTestMatchExpression.
+     */
+    StatusWithMatchExpression _parseBitTest(const char* name,
+                                            std::unique_ptr<BitTestMatchExpression> bme,
+                                            const BSONElement& e);
+
+    /**
+     * Vectorize 'theArray', which is a BSONArray of integers.
+     */
+    StatusWith<std::vector<int>> _parseBitPositionsArray(const BSONObj& theArray);
+
     // The maximum allowed depth of a query tree. Just to guard against stack overflow.
     static const int kMaximumTreeDepth;
 

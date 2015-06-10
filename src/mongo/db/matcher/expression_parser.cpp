@@ -36,6 +36,7 @@
 #include "mongo/db/matcher/expression_array.h"
 #include "mongo/db/matcher/expression_leaf.h"
 #include "mongo/db/matcher/expression_tree.h"
+#include "mongo/stdx/memory.h"
 #include "mongo/util/mongoutils/str.h"
 
 
@@ -63,11 +64,13 @@ bool hasNode(const MatchExpression* root, MatchExpression::MatchType type) {
 namespace mongo {
 
 using std::string;
+using std::unique_ptr;
+using stdx::make_unique;
 
 StatusWithMatchExpression MatchExpressionParser::_parseComparison(const char* name,
                                                                   ComparisonMatchExpression* cmp,
                                                                   const BSONElement& e) {
-    std::unique_ptr<ComparisonMatchExpression> temp(cmp);
+    unique_ptr<ComparisonMatchExpression> temp(cmp);
 
     // Non-equality comparison match expressions cannot have
     // a regular expression as the argument (e.g. {a: {$gt: /b/}} is illegal).
@@ -128,7 +131,7 @@ StatusWithMatchExpression MatchExpressionParser::_parseSubField(const BSONObj& c
             StatusWithMatchExpression s = _parseComparison(name, new EqualityMatchExpression(), e);
             if (!s.isOK())
                 return s;
-            std::unique_ptr<NotMatchExpression> n(new NotMatchExpression());
+            unique_ptr<NotMatchExpression> n(new NotMatchExpression());
             Status s2 = n->init(s.getValue());
             if (!s2.isOK())
                 return StatusWithMatchExpression(s2);
@@ -140,7 +143,7 @@ StatusWithMatchExpression MatchExpressionParser::_parseSubField(const BSONObj& c
         case BSONObj::opIN: {
             if (e.type() != Array)
                 return StatusWithMatchExpression(ErrorCodes::BadValue, "$in needs an array");
-            std::unique_ptr<InMatchExpression> temp(new InMatchExpression());
+            unique_ptr<InMatchExpression> temp(new InMatchExpression());
             Status s = temp->init(name);
             if (!s.isOK())
                 return StatusWithMatchExpression(s);
@@ -153,7 +156,7 @@ StatusWithMatchExpression MatchExpressionParser::_parseSubField(const BSONObj& c
         case BSONObj::NIN: {
             if (e.type() != Array)
                 return StatusWithMatchExpression(ErrorCodes::BadValue, "$nin needs an array");
-            std::unique_ptr<InMatchExpression> temp(new InMatchExpression());
+            unique_ptr<InMatchExpression> temp(new InMatchExpression());
             Status s = temp->init(name);
             if (!s.isOK())
                 return StatusWithMatchExpression(s);
@@ -161,7 +164,7 @@ StatusWithMatchExpression MatchExpressionParser::_parseSubField(const BSONObj& c
             if (!s.isOK())
                 return StatusWithMatchExpression(s);
 
-            std::unique_ptr<NotMatchExpression> temp2(new NotMatchExpression());
+            unique_ptr<NotMatchExpression> temp2(new NotMatchExpression());
             s = temp2->init(temp.release());
             if (!s.isOK())
                 return StatusWithMatchExpression(s);
@@ -194,7 +197,7 @@ StatusWithMatchExpression MatchExpressionParser::_parseSubField(const BSONObj& c
                 return StatusWithMatchExpression(ErrorCodes::BadValue, "$size needs a number");
             }
 
-            std::unique_ptr<SizeMatchExpression> temp(new SizeMatchExpression());
+            unique_ptr<SizeMatchExpression> temp(new SizeMatchExpression());
             Status s = temp->init(name, size);
             if (!s.isOK())
                 return StatusWithMatchExpression(s);
@@ -204,13 +207,13 @@ StatusWithMatchExpression MatchExpressionParser::_parseSubField(const BSONObj& c
         case BSONObj::opEXISTS: {
             if (e.eoo())
                 return StatusWithMatchExpression(ErrorCodes::BadValue, "$exists can't be eoo");
-            std::unique_ptr<ExistsMatchExpression> temp(new ExistsMatchExpression());
+            unique_ptr<ExistsMatchExpression> temp(new ExistsMatchExpression());
             Status s = temp->init(name);
             if (!s.isOK())
                 return StatusWithMatchExpression(s);
             if (e.trueValue())
                 return StatusWithMatchExpression(temp.release());
-            std::unique_ptr<NotMatchExpression> temp2(new NotMatchExpression());
+            unique_ptr<NotMatchExpression> temp2(new NotMatchExpression());
             s = temp2->init(temp.release());
             if (!s.isOK())
                 return StatusWithMatchExpression(s);
@@ -223,7 +226,7 @@ StatusWithMatchExpression MatchExpressionParser::_parseSubField(const BSONObj& c
             int type = e.numberInt();
             if (e.type() != NumberInt && type != e.number())
                 type = -1;
-            std::unique_ptr<TypeMatchExpression> temp(new TypeMatchExpression());
+            unique_ptr<TypeMatchExpression> temp(new TypeMatchExpression());
             Status s = temp->init(name, type);
             if (!s.isOK())
                 return StatusWithMatchExpression(s);
@@ -261,6 +264,21 @@ StatusWithMatchExpression MatchExpressionParser::_parseSubField(const BSONObj& c
         case BSONObj::opWITHIN:
         case BSONObj::opGEO_INTERSECTS:
             return expressionParserGeoCallback(name, x, context);
+
+        /**
+         * Handles bitwise query operators.
+         */
+        case BSONObj::opBITS_ALL_SET:
+            return _parseBitTest(name, make_unique<BitsAllSetMatchExpression>(), e);
+
+        case BSONObj::opBITS_ALL_CLEAR:
+            return _parseBitTest(name, make_unique<BitsAllClearMatchExpression>(), e);
+
+        case BSONObj::opBITS_ANY_SET:
+            return _parseBitTest(name, make_unique<BitsAnySetMatchExpression>(), e);
+
+        case BSONObj::opBITS_ANY_CLEAR:
+            return _parseBitTest(name, make_unique<BitsAnyClearMatchExpression>(), e);
     }
 
     return StatusWithMatchExpression(ErrorCodes::BadValue,
@@ -275,7 +293,7 @@ StatusWithMatchExpression MatchExpressionParser::_parse(const BSONObj& obj, int 
         return StatusWithMatchExpression(ErrorCodes::BadValue, ss);
     }
 
-    std::unique_ptr<AndMatchExpression> root(new AndMatchExpression());
+    unique_ptr<AndMatchExpression> root(new AndMatchExpression());
 
     bool topLevel = (level == 0);
     level++;
@@ -290,7 +308,7 @@ StatusWithMatchExpression MatchExpressionParser::_parse(const BSONObj& obj, int 
             if (mongoutils::str::equals("or", rest)) {
                 if (e.type() != Array)
                     return StatusWithMatchExpression(ErrorCodes::BadValue, "$or needs an array");
-                std::unique_ptr<OrMatchExpression> temp(new OrMatchExpression());
+                unique_ptr<OrMatchExpression> temp(new OrMatchExpression());
                 Status s = _parseTreeList(e.Obj(), temp.get(), level);
                 if (!s.isOK())
                     return StatusWithMatchExpression(s);
@@ -298,7 +316,7 @@ StatusWithMatchExpression MatchExpressionParser::_parse(const BSONObj& obj, int 
             } else if (mongoutils::str::equals("and", rest)) {
                 if (e.type() != Array)
                     return StatusWithMatchExpression(ErrorCodes::BadValue, "and needs an array");
-                std::unique_ptr<AndMatchExpression> temp(new AndMatchExpression());
+                unique_ptr<AndMatchExpression> temp(new AndMatchExpression());
                 Status s = _parseTreeList(e.Obj(), temp.get(), level);
                 if (!s.isOK())
                     return StatusWithMatchExpression(s);
@@ -306,7 +324,7 @@ StatusWithMatchExpression MatchExpressionParser::_parse(const BSONObj& obj, int 
             } else if (mongoutils::str::equals("nor", rest)) {
                 if (e.type() != Array)
                     return StatusWithMatchExpression(ErrorCodes::BadValue, "and needs an array");
-                std::unique_ptr<NorMatchExpression> temp(new NorMatchExpression());
+                unique_ptr<NorMatchExpression> temp(new NorMatchExpression());
                 Status s = _parseTreeList(e.Obj(), temp.get(), level);
                 if (!s.isOK())
                     return StatusWithMatchExpression(s);
@@ -337,7 +355,7 @@ StatusWithMatchExpression MatchExpressionParser::_parse(const BSONObj& obj, int 
             } else if (mongoutils::str::equals("ref", rest) ||
                        mongoutils::str::equals("id", rest) || mongoutils::str::equals("db", rest)) {
                 // DBRef fields.
-                std::unique_ptr<ComparisonMatchExpression> eq(new EqualityMatchExpression());
+                unique_ptr<ComparisonMatchExpression> eq(new EqualityMatchExpression());
                 Status s = eq->init(e.fieldName(), e);
                 if (!s.isOK())
                     return StatusWithMatchExpression(s);
@@ -367,7 +385,7 @@ StatusWithMatchExpression MatchExpressionParser::_parse(const BSONObj& obj, int 
             continue;
         }
 
-        std::unique_ptr<ComparisonMatchExpression> eq(new EqualityMatchExpression());
+        unique_ptr<ComparisonMatchExpression> eq(new EqualityMatchExpression());
         Status s = eq->init(e.fieldName(), e);
         if (!s.isOK())
             return StatusWithMatchExpression(s);
@@ -528,7 +546,7 @@ StatusWithMatchExpression MatchExpressionParser::_parseMOD(const char* name, con
     if (i.more())
         return StatusWithMatchExpression(ErrorCodes::BadValue, "malformed mod, too many elements");
 
-    std::unique_ptr<ModMatchExpression> temp(new ModMatchExpression());
+    unique_ptr<ModMatchExpression> temp(new ModMatchExpression());
     Status s = temp->init(name, d.numberInt(), r.numberInt());
     if (!s.isOK())
         return StatusWithMatchExpression(s);
@@ -540,7 +558,7 @@ StatusWithMatchExpression MatchExpressionParser::_parseRegexElement(const char* 
     if (e.type() != RegEx)
         return StatusWithMatchExpression(ErrorCodes::BadValue, "not a regex");
 
-    std::unique_ptr<RegexMatchExpression> temp(new RegexMatchExpression());
+    unique_ptr<RegexMatchExpression> temp(new RegexMatchExpression());
     Status s = temp->init(name, e.regex(), e.regexFlags());
     if (!s.isOK())
         return StatusWithMatchExpression(s);
@@ -579,7 +597,7 @@ StatusWithMatchExpression MatchExpressionParser::_parseRegexDocument(const char*
         }
     }
 
-    std::unique_ptr<RegexMatchExpression> temp(new RegexMatchExpression());
+    unique_ptr<RegexMatchExpression> temp(new RegexMatchExpression());
     Status s = temp->init(name, regex, regexOptions);
     if (!s.isOK())
         return StatusWithMatchExpression(s);
@@ -598,7 +616,7 @@ Status MatchExpressionParser::_parseArrayFilterEntries(ArrayFilterEntries* entri
         }
 
         if (e.type() == RegEx) {
-            std::unique_ptr<RegexMatchExpression> r(new RegexMatchExpression());
+            unique_ptr<RegexMatchExpression> r(new RegexMatchExpression());
             Status s = r->init("", e);
             if (!s.isOK())
                 return s;
@@ -650,7 +668,7 @@ StatusWithMatchExpression MatchExpressionParser::_parseElemMatch(const char* nam
         if (!s.isOK())
             return StatusWithMatchExpression(s);
 
-        std::unique_ptr<ElemMatchValueMatchExpression> temp(new ElemMatchValueMatchExpression());
+        unique_ptr<ElemMatchValueMatchExpression> temp(new ElemMatchValueMatchExpression());
         s = temp->init(name);
         if (!s.isOK())
             return StatusWithMatchExpression(s);
@@ -672,7 +690,7 @@ StatusWithMatchExpression MatchExpressionParser::_parseElemMatch(const char* nam
     StatusWithMatchExpression subRaw = _parse(obj, level);
     if (!subRaw.isOK())
         return subRaw;
-    std::unique_ptr<MatchExpression> sub(subRaw.getValue());
+    unique_ptr<MatchExpression> sub(subRaw.getValue());
 
     // $where is not supported under $elemMatch because $where
     // applies to top-level document, not array elements in a field.
@@ -681,7 +699,7 @@ StatusWithMatchExpression MatchExpressionParser::_parseElemMatch(const char* nam
                                          "$elemMatch cannot contain $where expression");
     }
 
-    std::unique_ptr<ElemMatchObjectMatchExpression> temp(new ElemMatchObjectMatchExpression());
+    unique_ptr<ElemMatchObjectMatchExpression> temp(new ElemMatchObjectMatchExpression());
     Status status = temp->init(name, sub.release());
     if (!status.isOK())
         return StatusWithMatchExpression(status);
@@ -696,7 +714,7 @@ StatusWithMatchExpression MatchExpressionParser::_parseAll(const char* name,
         return StatusWithMatchExpression(ErrorCodes::BadValue, "$all needs an array");
 
     BSONObj arr = e.Obj();
-    std::unique_ptr<AndMatchExpression> myAnd(new AndMatchExpression());
+    unique_ptr<AndMatchExpression> myAnd(new AndMatchExpression());
     BSONObjIterator i(arr);
 
     if (arr.firstElement().type() == Object &&
@@ -735,7 +753,7 @@ StatusWithMatchExpression MatchExpressionParser::_parseAll(const char* name,
         BSONElement e = i.next();
 
         if (e.type() == RegEx) {
-            std::unique_ptr<RegexMatchExpression> r(new RegexMatchExpression());
+            unique_ptr<RegexMatchExpression> r(new RegexMatchExpression());
             Status s = r->init(name, e);
             if (!s.isOK())
                 return StatusWithMatchExpression(s);
@@ -743,7 +761,7 @@ StatusWithMatchExpression MatchExpressionParser::_parseAll(const char* name,
         } else if (e.type() == Object && e.Obj().firstElement().getGtLtOp(-1) != -1) {
             return StatusWithMatchExpression(ErrorCodes::BadValue, "no $ expressions in $all");
         } else {
-            std::unique_ptr<EqualityMatchExpression> x(new EqualityMatchExpression());
+            unique_ptr<EqualityMatchExpression> x(new EqualityMatchExpression());
             Status s = x->init(name, e);
             if (!s.isOK())
                 return StatusWithMatchExpression(s);
@@ -756,6 +774,139 @@ StatusWithMatchExpression MatchExpressionParser::_parseAll(const char* name,
     }
 
     return StatusWithMatchExpression(myAnd.release());
+}
+
+/**
+ * Used for bit test operators.
+ */
+StatusWithMatchExpression MatchExpressionParser::_parseBitTest(
+    const char* name,
+    unique_ptr<BitTestMatchExpression> bitTestMatchExpression,
+    const BSONElement& e) {
+    if (e.type() == BSONType::Array) {
+        // Array of bit positions provided as value.
+
+        auto statusWithBitPositions = _parseBitPositionsArray(e.Obj());
+        if (!statusWithBitPositions.isOK()) {
+            return statusWithBitPositions.getStatus();
+        }
+
+        std::vector<int> bitPositions = statusWithBitPositions.getValue();
+
+        Status s = bitTestMatchExpression->init(name, bitPositions);
+        if (!s.isOK()) {
+            return s;
+        }
+
+        return bitTestMatchExpression.release();
+    } else if (e.isNumber()) {
+        // Integer bitmask provided as value.
+
+        // Used to check validity of
+        double eDouble = e.numberDouble();
+
+        // NaN doubles are rejected.
+        if (std::isnan(eDouble)) {
+            std::stringstream ss;
+            ss << name << " cannot take a NaN";
+            return Status(ErrorCodes::BadValue, ss.str());
+        }
+
+        // No overflow doubles
+        if (eDouble < std::numeric_limits<long long>::min() ||
+            eDouble > std::numeric_limits<long long>::max()) {
+            std::stringstream ss;
+            ss << name << " must be a 64-bit integer but received: " << eDouble;
+            return Status(ErrorCodes::BadValue, ss.str());
+        }
+
+        // This checks if e is an integral double.
+        double intpart;
+        if (modf(eDouble, &intpart) != 0.0) {
+            std::stringstream ss;
+            ss << name << " cannot have a fractional part but received: " << eDouble;
+            return Status(ErrorCodes::BadValue, ss.str());
+        }
+
+        long long bitMask = e.numberLong();
+
+        if (bitMask < 0) {
+            std::stringstream ss;
+            ss << name << " cannot take a negative number: " << bitMask;
+            return Status(ErrorCodes::BadValue, ss.str());
+        }
+
+        Status s = bitTestMatchExpression->init(name, bitMask);
+        if (!s.isOK()) {
+            return s;
+        }
+
+        return bitTestMatchExpression.release();
+    } else if (e.type() == BSONType::BinData) {
+        // Binary bitmask provided as value.
+
+        int eBinaryLen;
+        const char* eBinary = e.binData(eBinaryLen);
+
+        Status s = bitTestMatchExpression->init(name, eBinary, eBinaryLen);
+        if (!s.isOK()) {
+            return s;
+        }
+
+        return bitTestMatchExpression.release();
+    } else {
+        std::stringstream ss;
+        ss << name << " takes an Array, a number, or a BinData but received: " << e;
+        return Status(ErrorCodes::BadValue, ss.str());
+    }
+}
+
+/**
+ * Used for bit test operators, parses array of bit positions into int vector.
+ */
+StatusWith<std::vector<int>> MatchExpressionParser::_parseBitPositionsArray(
+    const BSONObj& theArray) {
+    BSONObjIterator i(theArray);
+    std::vector<int> bitPositions;
+
+    // Fill temporary bit position array with integers read from the BSON array
+    while (i.more()) {
+        BSONElement e = i.next();
+
+        if (!e.isNumber()) {
+            std::stringstream ss;
+            ss << "bit positions must be an integer but got: " << e;
+            return Status(ErrorCodes::BadValue, ss.str());
+        }
+
+        double eDouble = e.numberDouble();
+
+        // This checks if e is integral.
+        if (eDouble != floor(eDouble)) {
+            std::stringstream ss;
+            ss << "bit positions must be an integer but got: " << eDouble;
+            return Status(ErrorCodes::BadValue, ss.str());
+        }
+
+        // This makes sure e does not overflow a 32-bit integer container.
+        if (eDouble < std::numeric_limits<int>::min() ||
+            eDouble > std::numeric_limits<int>::max()) {
+            std::stringstream ss;
+            ss << "bit positions must be a 32-bit integer but got: " << eDouble;
+            return Status(ErrorCodes::BadValue, ss.str());
+        }
+
+        int eValue = e.numberInt();
+        if (eValue < 0) {
+            std::stringstream ss;
+            ss << "bit positions must be >= 0 but got: " << eValue;
+            return Status(ErrorCodes::BadValue, ss.str());
+        }
+
+        bitPositions.push_back(eValue);
+    }
+
+    return bitPositions;
 }
 
 StatusWithMatchExpression MatchExpressionParser::WhereCallback::parseWhere(

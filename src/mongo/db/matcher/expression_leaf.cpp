@@ -617,4 +617,270 @@ void InMatchExpression::copyTo(InMatchExpression* toFillIn) const {
     toFillIn->init(path());
     _arrayEntries.copyTo(toFillIn->_arrayEntries);
 }
+
+// -----------
+
+Status BitTestMatchExpression::init(StringData path, const std::vector<int>& bitPositions) {
+    _bitPositions = bitPositions;
+    return initPath(path);
+}
+
+Status BitTestMatchExpression::init(StringData path, long long bitMask) {
+    for (int bit = 0; bit < 64; bit++) {
+        if (bitMask & (1ll << bit)) {
+            _bitPositions.push_back(bit);
+        }
+    }
+
+    return initPath(path);
+}
+
+Status BitTestMatchExpression::init(StringData path, const char* bitMaskBinary, int bitMaskLen) {
+    for (int byte = 0; byte < bitMaskLen; byte++) {
+        for (int bit = 0; bit < 8; bit++) {
+            char byteAt = bitMaskBinary[byte];
+            if (byteAt & (1 << bit)) {
+                _bitPositions.push_back((byte << 3) | bit);
+            }
+        }
+    }
+
+    return initPath(path);
+}
+
+bool BitTestMatchExpression::processSingleElement(const BSONElement& e,
+                                                  bool* isNumber,
+                                                  long long* eValue,
+                                                  const char** eBinary,
+                                                  int* eBinaryLen) const {
+    if (e.isNumber()) {
+        // Numeric data cannot match against binary string.
+
+        double eDouble = e.numberDouble();
+
+        // NaN doubles are rejected.
+        if (std::isnan(eDouble)) {
+            return false;
+        }
+
+        // Overflow doubles are treated as 0.
+        if (eDouble < std::numeric_limits<long long>::min() ||
+            eDouble > std::numeric_limits<long long>::max()) {
+            eDouble = 0;
+        }
+
+        // This checks if e is an integral double.
+        double intpart;
+        if (modf(eDouble, &intpart) != 0.0) {
+            return false;
+        }
+        *eValue = e.numberLong();
+        *isNumber = true;
+    } else if (e.type() == BinData) {
+        // Binary data cannot match against 64-bit NumberLong bitmask.
+        *eBinary = e.binData(*eBinaryLen);
+    } else {
+        // No filter match if any other data type.
+        return false;
+    }
+
+    return true;
+}
+
+bool BitTestMatchExpression::performBitCheck(const bool& isNumber,
+                                             const long long& eValue,
+                                             const char*& eBinary,
+                                             const int& eBinaryLen) const {
+    MatchType mt = matchType();
+
+    // Check each bit position.
+    for (unsigned i = 0; i < _bitPositions.size(); i++) {
+        int bitPosition = _bitPositions[i];
+
+        /**
+         * If position to check is longer than data to check against, sign-extend for numbers and
+         * zero-extend for binary data.
+         */
+        int maxBitPosition = isNumber ? 64 : eBinaryLen << 3;
+        if (bitPosition >= maxBitPosition) {
+            if (isNumber && eValue < 0) {  // The number is negative -> sign-extend.
+                if (BITS_ALL_CLEAR) {
+                    return false;
+                }
+                if (BITS_ANY_SET) {
+                    return true;
+                }
+                if (mt == BITS_ALL_SET || BITS_ANY_CLEAR) {
+                    continue;
+                }
+            } else {  // Positive number or binary data -> zero-extend.
+                if (mt == BITS_ALL_SET) {
+                    return false;
+                }
+                if (mt == BITS_ANY_CLEAR) {
+                    return true;
+                }
+                if (mt == BITS_ALL_CLEAR || mt == BITS_ANY_SET) {
+                    continue;
+                }
+            }
+        }
+
+        // Do different bit-checking for numbers and binary data.
+        bool bitSet;
+        if (isNumber) {
+            bitSet = eValue & ((long long)1 << bitPosition);
+            if (bitSet) {
+                if (mt == BITS_ALL_CLEAR) {
+                    return false;
+                }
+                if (mt == BITS_ANY_SET) {
+                    return true;
+                }
+            } else {
+                if (mt == BITS_ALL_SET) {
+                    return false;
+                }
+                if (mt == BITS_ANY_CLEAR) {
+                    return true;
+                }
+            }
+        } else {
+            /**
+             * Map to byte position and bit position within that byte.
+             * Note that bytes are read in from left to right, but bits within each byte is
+             * still little-endian
+             */
+            int bytePosition = bitPosition >> 3;           // bitPosition / 8
+            int bit = bitPosition & ~(bytePosition << 3);  // bitPosition % 8
+            char byte = eBinary[bytePosition];
+
+            bitSet = byte & (1 << bit);
+        }
+
+        // If checking all, check if can return false. If checking any, check if can return true.
+        if (bitSet) {
+            if (mt == BITS_ALL_CLEAR) {
+                return false;
+            }
+            if (mt == BITS_ANY_SET) {
+                return true;
+            }
+        } else {
+            if (mt == BITS_ALL_SET) {
+                return false;
+            }
+            if (mt == BITS_ANY_CLEAR) {
+                return true;
+            }
+        }
+    }
+
+    // All bits passed.
+    if (mt == BITS_ALL_SET || mt == BITS_ALL_CLEAR) {
+        return true;
+    }
+    // No bits passed.
+    if (mt == BITS_ANY_SET || mt == BITS_ANY_CLEAR) {
+        return false;
+    }
+
+    // Should never get here.
+    return false;
+}
+
+bool BitTestMatchExpression::matchesSingleElement(const BSONElement& e) const {
+    bool isNumber = false;  // Whether e is a number or not (is binary data).
+    long long eValue;       // Integral value of element.
+    const char* eBinary;    // Binary value of element.
+    int eBinaryLen;         // Length of eBinary (in bytes).
+
+    /**
+     * Process out the values to bit-check.
+     */
+    if (!processSingleElement(e, &isNumber, &eValue, &eBinary, &eBinaryLen)) {
+        return false;
+    }
+
+    /**
+     * Perform the bit-checks.
+     */
+    return performBitCheck(isNumber, eValue, eBinary, eBinaryLen);
+}
+
+void BitTestMatchExpression::debugString(StringBuilder& debug, int level) const {
+    _debugAddSpace(debug, level);
+
+    debug << path() << " ";
+
+    switch (matchType()) {
+        case BITS_ALL_SET:
+            debug << "$bitsAllSet:";
+            break;
+        case BITS_ALL_CLEAR:
+            debug << "$bitsAllClear:";
+            break;
+        case BITS_ANY_SET:
+            debug << "$bitsAnySet:";
+            break;
+        case BITS_ANY_CLEAR:
+            debug << "$bitsAnyClear:";
+            break;
+        default:
+            debug << " UNKNOWN - should be impossible";
+            break;
+    }
+
+    debug << " [";
+    for (unsigned i = 0; i < _bitPositions.size(); i++) {
+        debug << _bitPositions[i];
+        if (i != _bitPositions.size() - 1) {
+            debug << ", ";
+        }
+    }
+    debug << "]";
+
+    MatchExpression::TagData* td = getTag();
+    if (NULL != td) {
+        debug << " ";
+        td->debugString(&debug);
+    }
+}
+
+void BitTestMatchExpression::toBSON(BSONObjBuilder* out) const {
+    string opString = "";
+
+    switch (matchType()) {
+        case BITS_ALL_SET:
+            opString = "$bitsAllSet";
+            break;
+        case BITS_ALL_CLEAR:
+            opString = "$bitsAllClear";
+            break;
+        case BITS_ANY_SET:
+            opString = "$bitsAnySet";
+            break;
+        case BITS_ANY_CLEAR:
+            opString = "$bitsAnyClear";
+            break;
+        default:
+            opString = "UNKNOWN - should be impossible";
+            break;
+    }
+
+    BSONArrayBuilder arrBob;
+    bitPositionsBSONArray(&arrBob);
+
+    out->append(path(), BSON(opString << arrBob.arr()));
+}
+
+bool BitTestMatchExpression::equivalent(const MatchExpression* other) const {
+    if (matchType() != other->matchType()) {
+        return false;
+    }
+
+    const BitTestMatchExpression* realOther = static_cast<const BitTestMatchExpression*>(other);
+
+    return path() == realOther->path() && copyBitPositions() == realOther->copyBitPositions();
+}
 }

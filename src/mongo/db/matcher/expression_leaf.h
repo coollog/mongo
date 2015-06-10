@@ -430,4 +430,132 @@ private:
     int _type;
 };
 
+/**
+ * Bit test query operators include $bitsAllSet, $bitsAllClear, $bitsAnySet, and $bitsAnyClear.
+ */
+class BitTestMatchExpression : public LeafMatchExpression {
+public:
+    BitTestMatchExpression(MatchType type) : LeafMatchExpression(type) {}
+
+    /**
+     * Initialize with either bit positions, a 64-bit numeric bitmask, or a binary string
+     * bitmask.
+     */
+    Status init(StringData path, const std::vector<int>& bitPositions);
+    Status init(StringData path, long long bitMask);
+    Status init(StringData path, const char* bitMaskBinary, int bitMaskLen);
+
+    virtual ~BitTestMatchExpression() {}
+
+    /**
+     * Checks the type of 'e' and processes its value into the out-parameters.
+     * Returns false if 'e' cannot pass the filter.
+     * 'isNumber' is if e is a number (vs is binary data).
+     * 'eValue' is the 64-bit integer representation of e (only set if e is a number).
+     * 'eBinary' is the binary char array representation of e (only set if e is not a number).
+     * 'eBinaryLen' is the length of 'eBinary' (only set if 'eBinary' is set).
+     */
+    virtual bool processSingleElement(const BSONElement& e,
+                                      bool* isNumber,
+                                      long long* eValue,
+                                      const char** eBinary,
+                                      int* eBinaryLen) const;
+
+    /**
+     * Performs bit check on 'eValue' if 'isNumber' or 'eBinary' if not 'isNumber' using bit
+     * positions.
+     * Returns whether or not the bit check passes.
+     */
+    bool performBitCheck(const bool& isNumber,
+                         const long long& eValue,
+                         const char*& eBinary,
+                         const int& eBinaryLen) const;
+
+    virtual bool matchesSingleElement(const BSONElement& e) const;
+
+    virtual void debugString(StringBuilder& debug, int level) const;
+
+    virtual void toBSON(BSONObjBuilder* out) const;
+
+    virtual bool equivalent(const MatchExpression* other) const;
+
+    size_t numBitPositions() const {
+        return _bitPositions.size();
+    }
+
+    void bitPositionsBSONArray(BSONArrayBuilder* out) const {
+        for (unsigned i = 0; i < _bitPositions.size(); i++) {
+            out->append(_bitPositions[i]);
+        }
+        out->doneFast();
+    };
+
+    std::vector<int> copyBitPositions() const {
+        return _bitPositions;
+    }
+
+protected:
+    // Vector of bit positions to check, with bit position 0 being the least significant bit.
+    std::vector<int> _bitPositions;
+
+    /**
+     * Used to copy this match expression to another BitTestMatchExpression. Does not take
+     * ownership.
+     */
+    void copyToBitTestMatchExpression(BitTestMatchExpression* bitTestMatchExpression) const {
+        bitTestMatchExpression->init(path(), _bitPositions);
+        if (getTag()) {
+            bitTestMatchExpression->setTag(getTag()->clone());
+        }
+    }
+};
+
+/**
+ * BitTestMatchExpression inheritors for the 4 bit test query operators.
+ */
+
+class BitsAllSetMatchExpression : public BitTestMatchExpression {
+public:
+    BitsAllSetMatchExpression() : BitTestMatchExpression(BITS_ALL_SET) {}
+    virtual std::unique_ptr<MatchExpression> shallowClone() const {
+        std::unique_ptr<BitTestMatchExpression> bitTestMatchExpression =
+            stdx::make_unique<BitsAllSetMatchExpression>();
+        copyToBitTestMatchExpression(bitTestMatchExpression.get());
+        return std::move(bitTestMatchExpression);
+    }
+};
+
+class BitsAllClearMatchExpression : public BitTestMatchExpression {
+public:
+    BitsAllClearMatchExpression() : BitTestMatchExpression(BITS_ALL_CLEAR) {}
+    virtual std::unique_ptr<MatchExpression> shallowClone() const {
+        std::unique_ptr<BitTestMatchExpression> bitTestMatchExpression =
+            stdx::make_unique<BitsAllClearMatchExpression>();
+        copyToBitTestMatchExpression(bitTestMatchExpression.get());
+        return std::move(bitTestMatchExpression);
+    }
+};
+
+class BitsAnySetMatchExpression : public BitTestMatchExpression {
+public:
+    BitsAnySetMatchExpression() : BitTestMatchExpression(BITS_ANY_SET) {}
+    virtual std::unique_ptr<MatchExpression> shallowClone() const {
+        std::unique_ptr<BitTestMatchExpression> bitTestMatchExpression =
+            stdx::make_unique<BitsAnySetMatchExpression>();
+        copyToBitTestMatchExpression(bitTestMatchExpression.get());
+        return std::move(bitTestMatchExpression);
+    }
+};
+
+class BitsAnyClearMatchExpression : public BitTestMatchExpression {
+public:
+    BitsAnyClearMatchExpression() : BitTestMatchExpression(BITS_ANY_CLEAR) {}
+    virtual std::unique_ptr<MatchExpression> shallowClone() const {
+        std::unique_ptr<BitTestMatchExpression> bitTestMatchExpression =
+            stdx::make_unique<BitsAnyClearMatchExpression>();
+        copyToBitTestMatchExpression(bitTestMatchExpression.get());
+        return std::move(bitTestMatchExpression);
+    }
+};
+
 }  // namespace mongo
