@@ -96,7 +96,7 @@ namespace mongo {
         }
 
         // Replace our matcher with the $and of ours and theirs.
-        matcher.reset(new Matcher(BSON("$and" << BSON_ARRAY(getQuery() 
+        matcher.reset(new Matcher(BSON("$and" << BSON_ARRAY(getQuery()
                                               << otherMatch->getQuery())),
                                   MatchExpressionParser::WhereCallback()));
 
@@ -227,6 +227,10 @@ namespace {
             case BSONObj::opEXISTS:
             case BSONObj::opWITHIN:
             case BSONObj::opGEO_INTERSECTS:
+            case BSONObj::opBITS_ALL_SET: // TODO: Perhaps we should have something for bitwise ops?
+            case BSONObj::opBITS_ALL_CLEAR:
+            case BSONObj::opBITS_ANY_SET:
+            case BSONObj::opBITS_ANY_CLEAR:
                 continue;
             }
         }

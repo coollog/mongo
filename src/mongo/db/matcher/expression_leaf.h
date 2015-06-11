@@ -405,7 +405,8 @@ namespace mongo {
     public:
         BitwiseMatchExpression(MatchType type): LeafMatchExpression(type) {}
 
-        Status init(StringData path, const std::vector<unsigned int>& bitPositions);
+        Status init(StringData path, const std::vector<int>& bitPositions);
+        Status init(StringData path, const long long& bitMask);
 
         virtual ~BitwiseMatchExpression() {}
 
@@ -426,10 +427,12 @@ namespace mongo {
             out->doneFast();
         };
 
-        std::vector<unsigned int> copyBitPositions() const { return _bitPositions; }
+        std::vector<int> copyBitPositions() const { return _bitPositions; }
 
     protected:
-        std::vector<unsigned int> _bitPositions;
+        bool _useBitMask; // Flag to use bitmask or not (use bit positions).
+        std::vector<int> _bitPositions;
+        long long _bitMask;
 
         inline bool checkBit(unsigned char byte, int bit) const { return byte & (1 << bit); }
     };
@@ -443,7 +446,12 @@ namespace mongo {
         BitsSetMatchExpression(): BitwiseMatchExpression(BITS_SET) {}
         virtual LeafMatchExpression* shallowClone() const {
             BitwiseMatchExpression* e = new BitsSetMatchExpression();
-            e->init(path(), _bitPositions);
+            if (_useBitMask) {
+                e->init(path(), _bitMask);
+            }
+            else {
+                e->init(path(), _bitPositions);
+            }
             if (getTag()) {
                 e->setTag(getTag()->clone());
             }
@@ -456,7 +464,12 @@ namespace mongo {
         BitsClearMatchExpression(): BitwiseMatchExpression(BITS_CLEAR) {}
         virtual LeafMatchExpression* shallowClone() const {
             BitwiseMatchExpression* e = new BitsClearMatchExpression();
-            e->init(path(), _bitPositions);
+            if (_useBitMask) {
+                e->init(path(), _bitMask);
+            }
+            else {
+                e->init(path(), _bitPositions);
+            }
             if (getTag()) {
                 e->setTag(getTag()->clone());
             }

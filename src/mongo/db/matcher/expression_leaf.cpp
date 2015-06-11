@@ -604,8 +604,17 @@ namespace mongo {
     }
 
     // -----------
-    Status BitwiseMatchExpression::init(StringData path, const std::vector<unsigned int>& bitPositions) {
+
+    Status BitwiseMatchExpression::init(StringData path,
+                                        const std::vector<int>& bitPositions) {
         _bitPositions = bitPositions;
+        _useBitMask = false;
+        return initPath(path);
+    }
+
+    Status BitwiseMatchExpression::init(StringData path, const long long& bitMask) {
+        _bitMask = bitMask;
+        _useBitMask = true;
         return initPath(path);
     }
 
@@ -634,21 +643,21 @@ namespace mongo {
             eValue = e.numberLong();
             isNumber = true;
         }
-        else if (e.type() == BinData) {
-            // If e is binary data, it is arbitrary length, so we use 64-bit vectors.
-
-            eBinary = e.binData(eBinaryLen);
-        }
-        else if (e.type() == jstOID) {
-            // Same with ObjectId()'s
-
-            eBinary = e.value();
-            eBinaryLen = e.valuesize();
-        }
         else if (e.type() == Date) {
             // If e is a Date or Timestamp
             eValue = e.date().toMillisSinceEpoch();
             isNumber = true;
+        }
+        else if (!_useBitMask && e.type() == BinData) {
+            // If e is binary data, it is arbitrary length, so we use 64-bit vectors.
+
+            eBinary = e.binData(eBinaryLen);
+        }
+        else if (!_useBitMask && e.type() == jstOID) {
+            // Same with ObjectId()'s
+
+            eBinary = e.value();
+            eBinaryLen = e.valuesize();
         }
         else {
             // No filter match if any other data type.
@@ -662,6 +671,16 @@ namespace mongo {
         switch (mt) {
         case BITS_SET:
         case BITS_CLEAR:
+            if (_useBitMask) {
+printf("\nUSINGBITMASK: %llu on %llu\n", _bitMask, eValue);
+                if (mt == BITS_SET) {
+                    return _bitMask == (eValue & _bitMask);
+                }
+                else if (mt == BITS_CLEAR) {
+                    return 0 == (eValue & _bitMask);
+                }
+            }
+
             // Check each bit position.
             for (unsigned i = 0; i < _bitPositions.size(); i++) {
                 int bitPosition = _bitPositions[i];

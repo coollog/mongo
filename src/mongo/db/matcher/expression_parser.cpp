@@ -267,6 +267,21 @@ namespace mongo {
         case BSONObj::opWITHIN:
         case BSONObj::opGEO_INTERSECTS:
             return expressionParserGeoCallback( name, x, context );
+
+        /**
+         * Handles bitwise query operators.
+         */
+        case BSONObj::opBITS_ALL_SET:
+            return _parseBitwise(name, new BitsSetMatchExpression(), e);
+
+        case BSONObj::opBITS_ALL_CLEAR:
+            return _parseBitwise(name, new BitsClearMatchExpression(), e);
+
+        case BSONObj::opBITS_ANY_SET: // TODO: CHANGE THIS
+            return _parseBitwiseNot(name, new BitsClearMatchExpression(), e);
+
+        case BSONObj::opBITS_ANY_CLEAR: // TODO: CHANGE THIS
+            return _parseBitwiseNot(name, new BitsSetMatchExpression(), e);
         }
 
         return StatusWithMatchExpression( ErrorCodes::BadValue,
@@ -324,7 +339,7 @@ namespace mongo {
                         return StatusWithMatchExpression( s );
                     root->add( temp.release() );
                 }
-                else if ( mongoutils::str::equals( "atomic", rest ) || 
+                else if ( mongoutils::str::equals( "atomic", rest ) ||
                           mongoutils::str::equals( "isolated", rest ) ) {
                     if ( !topLevel )
                         return StatusWithMatchExpression( ErrorCodes::BadValue,
@@ -785,6 +800,100 @@ namespace mongo {
         }
 
         return StatusWithMatchExpression( myAnd.release() );
+    }
+
+    /**
+     * Used for bitwise operators, parses $bitsAllSet and $bitsAllClear (or $bitsSet/$bitsClear).
+     */
+    StatusWithMatchExpression MatchExpressionParser::_parseBitwise(const char* name,
+                                                                   BitwiseMatchExpression* bme,
+                                                                   const BSONElement& e) {
+        if (e.type() == Array) {
+            // Array of bit positions provided as value.
+
+            std::unique_ptr<BitwiseMatchExpression> bitwiseMatchExpression(bme);
+
+            std::vector<int> bitPositions;
+            Status s = _parseBitPositionsArray(bitPositions, e.Obj());
+            if (!s.isOK()) {
+                return StatusWithMatchExpression(s);
+            }
+
+            s = bitwiseMatchExpression->init(name, bitPositions);
+            if (!s.isOK()) {
+                return StatusWithMatchExpression(s);
+            }
+
+            return StatusWithMatchExpression(bitwiseMatchExpression.release());
+        }
+        else if (e.isNumber()) {
+            // Integer bitmask provided as value.
+
+            std::unique_ptr<BitwiseMatchExpression> bitwiseMatchExpression(bme);
+
+            long long bitMask = e.safeNumberLong();
+
+            Status s = bitwiseMatchExpression->init(name, bitMask);
+            if (!s.isOK()) {
+                return StatusWithMatchExpression(s);
+            }
+
+            return StatusWithMatchExpression(bitwiseMatchExpression.release());
+        }
+        else {
+            std::stringstream ss;
+            ss << name << " takes either an Array or a number";
+            return StatusWithMatchExpression(ErrorCodes::BadValue, ss.str());
+        }
+    }
+
+    /**
+     * Used for bitwise operators, parses $bitsAnySet and $bitsAnyClear.
+     */
+    StatusWithMatchExpression MatchExpressionParser::_parseBitwiseNot(const char* name,
+                                                                      BitwiseMatchExpression* bme,
+                                                                      const BSONElement& e) {
+        StatusWithMatchExpression swme = _parseBitwise(name, bme, e);
+        if (!swme.isOK()) {
+            return swme;
+        }
+
+        std::unique_ptr<NotMatchExpression> notMatchExpression(new NotMatchExpression());
+        Status s = notMatchExpression->init(swme.getValue());
+        if (!s.isOK()) {
+            return StatusWithMatchExpression(s);
+        }
+
+        return StatusWithMatchExpression(notMatchExpression.release());
+    }
+
+    /**
+     * Used for bitwise operators, parses array of bit positions into int vector.
+     */
+    Status MatchExpressionParser::_parseBitPositionsArray(std::vector<int>& bitPositions,
+                                                          const BSONObj& theArray) {
+        std::vector<int> bitPositionsTemp;
+        BSONObjIterator i(theArray);
+
+        // Fill temporary bit position array with integers read from the BSON array
+        while (i.more()) {
+            BSONElement e = i.next();
+
+            if (!e.isNumber()) {
+                return Status(ErrorCodes::BadValue, "bit positions must be an integer");
+            }
+
+            int eValue = e.numberInt();
+            if (eValue < 0) {
+                return Status(ErrorCodes::BadValue, "bit positions must be >= 0");
+            }
+
+            bitPositionsTemp.push_back(eValue);
+        }
+
+        bitPositions = bitPositionsTemp;
+
+        return Status::OK();
     }
 
     StatusWithMatchExpression MatchExpressionParser::WhereCallback::parseWhere(

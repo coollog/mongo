@@ -348,6 +348,18 @@ namespace mongo {
                 return BSONObj::opNEAR;
             else if (str::equals(fn + 1, "geoWithin"))
                 return BSONObj::opWITHIN;
+            else if (str::equals(fn + 1, "bitsAllSet") || str::equals(fn + 1, "bitsSet")) {
+                return BSONObj::opBITS_ALL_SET;
+            }
+            else if (str::equals(fn + 1, "bitsAllClear") || str::equals(fn + 1, "bitsClear")) {
+                return BSONObj::opBITS_ALL_CLEAR;
+            }
+            else if (str::equals(fn + 1, "bitsAnySet")) {
+                return BSONObj::opBITS_ANY_SET;
+            }
+            else if (str::equals(fn + 1, "bitsAnyClear")) {
+                return BSONObj::opBITS_ANY_SET;
+            }
         }
         return def;
     }
@@ -378,8 +390,8 @@ namespace mongo {
         }
         return v;
     }
-    
-    /* wo = "well ordered" 
+
+    /* wo = "well ordered"
        note: (mongodb related) : this can only change in behavior when index version # changes
     */
     int BSONElement::woCompare( const BSONElement &e,
@@ -432,12 +444,12 @@ namespace mongo {
         return b.obj();
     }
 
-    void BSONElement::Val(BSONObj& v) const { 
-        v = Obj(); 
+    void BSONElement::Val(BSONObj& v) const {
+        v = Obj();
     }
 
-    BSONObj BSONElement::Obj() const { 
-        return embeddedObjectUserCheck(); 
+    BSONObj BSONElement::Obj() const {
+        return embeddedObjectUserCheck();
     }
 
     BSONElement BSONElement::operator[] (const std::string& field) const {
@@ -570,7 +582,7 @@ namespace mongo {
         case BinData:
             x = valuestrsize() + 4 + 1/*subtype*/;
             break;
-        case RegEx: 
+        case RegEx:
             {
                 const char *p = value();
                 size_t len1 = strlen(p);
@@ -580,7 +592,7 @@ namespace mongo {
                 x = (int) (len1 + 1 + len2 + 1);
             }
             break;
-        default: 
+        default:
             {
                 StringBuilder ss;
                 ss << "BSONElement: bad type " << (int) type();
@@ -598,7 +610,7 @@ namespace mongo {
         toString(s, includeFieldName, full);
         return s.str();
     }
-    
+
     void BSONElement::toString( StringBuilder& s, bool includeFieldName, bool full, int depth ) const {
 
         if ( depth > BSONObj::maxToStringRecursionDepth ) {
@@ -858,7 +870,7 @@ namespace mongo {
             {
                 const Date_t a = l.Date();
                 const Date_t b = r.Date();
-                if( a < b ) 
+                if( a < b )
                     return -1;
                 return a == b ? 0 : 1;
             }
@@ -904,7 +916,7 @@ namespace mongo {
                 int rsz = r.valuestrsize();
                 int common = std::min(lsz, rsz);
                 int res = memcmp(l.valuestr(), r.valuestr(), common);
-                if( res ) 
+                if( res )
                     return res;
                 // longer std::string is the greater one
                 return lsz-rsz;
@@ -942,7 +954,7 @@ namespace mongo {
         }
         return -1;
     }
- 
+
     size_t BSONElement::Hasher::operator()(const BSONElement& elem) const {
         size_t hash = 0;
 

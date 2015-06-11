@@ -164,6 +164,19 @@ namespace mongo {
                                                     const BSONElement& e,
                                                     int level );
 
+        // Bitwise query operators.
+
+        StatusWithMatchExpression _parseBitwise(const char* name,
+                                                BitwiseMatchExpression* bme,
+                                                const BSONElement& e);
+
+        StatusWithMatchExpression _parseBitwiseNot(const char* name,
+                                                   BitwiseMatchExpression* bme,
+                                                   const BSONElement& e);
+
+        Status _parseBitPositionsArray(std::vector<int>& bitPositions,
+                                       const BSONObj& theArray);
+
         // The maximum allowed depth of a query tree. Just to guard against stack overflow.
         static const int kMaximumTreeDepth;
 

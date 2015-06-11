@@ -111,6 +111,8 @@ namespace {
         case MatchExpression::ALWAYS_FALSE: return "af"; break;
         case MatchExpression::GEO_NEAR: return "gn"; break;
         case MatchExpression::TEXT: return "te"; break;
+        case MatchExpression::BITS_SET: return "bs"; break;
+        case MatchExpression::BITS_CLEAR: return "bc"; break;
         default: verify(0); return "";
         }
     }
