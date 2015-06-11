@@ -612,7 +612,8 @@ namespace mongo {
     bool BitwiseMatchExpression::matchesSingleElement(const BSONElement& e) const {
         bool isNumber = false; // Whether e is a number or not (is binary data).
         long long eValue; // Integral value of element.
-        // const char* eBinary; // Binary value of element.
+        const char* eBinary; // Binary value of element.
+        int eBinaryLen; // Length of eBinary (in bytes).
 
         if (e.isNumber()) {
             double eDouble = e.numberDouble();
@@ -630,9 +631,28 @@ namespace mongo {
             eValue = e.numberLong();
             isNumber = true;
         }
-        else if (e.type() == BinData || e.type() == jstOID) {
+        else if (e.type() == BinData) {
             // If e is binary data, it is arbitrary length, so we use 64-bit vectors.
-            return true; // TODO: CHANGE THIS
+
+            eBinary = e.binData(eBinaryLen);
+// printf("\nBinary Data: '");
+//                     for (int j = 0; j < eBinaryLen; j ++) {
+//                         unsigned char B = eBinary[j];
+// printf("%d|", B);
+//                     }
+// printf("'\n");
+        }
+        else if (e.type() == jstOID) {
+            // Same with ObjectId()'s
+
+            eBinary = e.value();
+            eBinaryLen = e.valuesize();
+// printf("\nBinary Data: '");
+//                     for (int j = 0; j < eBinaryLen; j ++) {
+//                         unsigned char B = eBinary[j];
+// printf("%d|", B);
+//                     }
+// printf("'\n");
         }
         else if (e.type() == Date) {
             // If e is a Date or Timestamp
@@ -649,38 +669,71 @@ namespace mongo {
         switch (mt) {
         case BITS_SET:
         case BITS_CLEAR:
-            if (isNumber) {
-                // Check each bit position.
-                for (unsigned i = 0; i < _bitPositions.size(); i++) {
+            // Check each bit position.
+            for (unsigned i = 0; i < _bitPositions.size(); i++) {
+                int bitPosition = _bitPositions[i];
+
+                if (isNumber) {
                     if (mt == BITS_SET) {
-                        if (_bitPositions[i] >= 64) {
+                        if (bitPosition >= 64) {
                             // Cannot check for more than 64-bits.
                             return false;
                         }
-                        if (!(eValue & (1 << _bitPositions[i]))) {
+                        if (!(eValue & (1 << bitPosition))) {
                             // If bit is not set, return false.
                             return false;
                         }
                     }
                     else if (mt == BITS_CLEAR) {
-                        if (_bitPositions[i] >= 64) {
+                        if (bitPosition >= 64) {
                             // Assume to be zero.
                             continue;
                         }
-                        if (eValue & (1 << _bitPositions[i])) {
+                        if (eValue & (1 << bitPosition)) {
                             // If bit is set, return false.
                             return false;
                         }
                     }
                 }
-                // All bits passed.
-                return true;
-            }
-            else {
-                // Map to byte position and bit position within that byte
+                else {
+                    if (bitPosition >= eBinaryLen << 3) {
+                        if (mt == BITS_SET) {
+                            // Cannot check for more than length of eBinary
+                            return false;
+                        }
+                        else if (mt == BITS_CLEAR) {
+                            // Assume to be zero.
+                            continue;
+                        }
+                    }
 
-                return true;
+                    /**
+                     * Map to byte position and bit position within that byte.
+                     * Note that bytes are read in from left to right, but bits within each byte is
+                     * still little-endian
+                     */
+                    int bytePosition = bitPosition >> 3; // bitPosition / 8
+                    int bp = bitPosition - (bytePosition << 3); // bitPosition % 8
+// printf("\nbytePos: %d | bitPos: %d\n", bytePosition, bp);
+
+                    unsigned char B = eBinary[bytePosition];
+                    if (mt == BITS_SET) {
+                        if (!(B & (1 << bp))) {
+                            // If bit is not set, return false.
+                            return false;
+                        }
+                    }
+                    else if (mt == BITS_CLEAR) {
+                        if (B & (1 << bp)) {
+                            // If bit is set, return false.
+                            return false;
+                        }
+                    }
+                }
             }
+
+            // All bits passed.
+            return true;
 
         default:
             // TODO: Call some fassertfailed on unexpected MatchType

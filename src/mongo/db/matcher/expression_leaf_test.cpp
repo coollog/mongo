@@ -1704,7 +1704,8 @@ namespace mongo {
         BSONObj match1 = fromjson("{a: NumberInt(54)}");
         BSONObj match2 = fromjson("{a: NumberLong(54)}");
         BSONObj match3 = fromjson("{a: 54.0}");
-        BSONObj match4 = fromjson("{a: {$binary: 'AAAAAAAAAAAAAAAAAAAAAAAAAAA2', $type: '00'}}");
+        BSONObj match4 = fromjson("{a: {$binary: '2AAAAAAAAAAAAAAAAAAAAAAAAAAA', $type: '00'}}");
+        BSONObj match5 = fromjson("{a: Date(54)}");
 
         BitsSetMatchExpression bs;
         BitsClearMatchExpression bc;
@@ -1717,10 +1718,12 @@ namespace mongo {
         ASSERT(bs.matchesSingleElement(match2["a"]));
         ASSERT(bs.matchesSingleElement(match3["a"]));
         ASSERT(bs.matchesSingleElement(match4["a"]));
+        ASSERT(bs.matchesSingleElement(match5["a"]));
         ASSERT(bc.matchesSingleElement(match1["a"]));
         ASSERT(bc.matchesSingleElement(match2["a"]));
         ASSERT(bc.matchesSingleElement(match3["a"]));
         ASSERT(bc.matchesSingleElement(match4["a"]));
+        ASSERT(bc.matchesSingleElement(match5["a"]));
     }
 
     TEST(BitwiseMatchExpression, MatchesInteger) {
@@ -1732,6 +1735,65 @@ namespace mongo {
         BSONObj match1 = fromjson("{a: NumberInt(54)}");
         BSONObj match2 = fromjson("{a: NumberLong(54)}");
         BSONObj match3 = fromjson("{a: 54.0}");
+        BSONObj match4 = fromjson("{a: Date(54)}");
+
+        BitsSetMatchExpression bs;
+        BitsClearMatchExpression bc;
+
+        ASSERT_OK(bs.init("a", bitPositionsSet));
+        ASSERT_OK(bc.init("a", bitPositionsClear));
+        ASSERT_EQ((size_t)4, bs.bitPositionsCount());
+        ASSERT_EQ((size_t)3, bc.bitPositionsCount());
+        ASSERT(bs.matchesSingleElement(match1["a"]));
+        ASSERT(bs.matchesSingleElement(match2["a"]));
+        ASSERT(bs.matchesSingleElement(match3["a"]));
+        ASSERT(bs.matchesSingleElement(match4["a"]));
+        ASSERT(bc.matchesSingleElement(match1["a"]));
+        ASSERT(bc.matchesSingleElement(match2["a"]));
+        ASSERT(bc.matchesSingleElement(match3["a"]));
+        ASSERT(bc.matchesSingleElement(match4["a"]));
+    }
+
+    TEST(BitwiseMatchExpression, DoesNotMatchInteger) {
+        BSONArray bas = BSON_ARRAY(1 << 2 << 4 << 5 << 6);
+        BSONArray bac = BSON_ARRAY(0 << 3 << 1);
+        std::vector<unsigned int> bitPositionsSet = BSONArrayToBitPositions(bas);
+        std::vector<unsigned int> bitPositionsClear = BSONArrayToBitPositions(bac);
+
+        BSONObj match1 = fromjson("{a: NumberInt(54)}");
+        BSONObj match2 = fromjson("{a: NumberLong(54)}");
+        BSONObj match3 = fromjson("{a: 54.0}");
+        BSONObj match4 = fromjson("{a: Date(54)}");
+
+        BitsSetMatchExpression bs;
+        BitsClearMatchExpression bc;
+
+        ASSERT_OK(bs.init("a", bitPositionsSet));
+        ASSERT_OK(bc.init("a", bitPositionsClear));
+        ASSERT_EQ((size_t)5, bs.bitPositionsCount());
+        ASSERT_EQ((size_t)3, bc.bitPositionsCount());
+        ASSERT(!bs.matchesSingleElement(match1["a"]));
+        ASSERT(!bs.matchesSingleElement(match2["a"]));
+        ASSERT(!bs.matchesSingleElement(match3["a"]));
+        ASSERT(!bs.matchesSingleElement(match4["a"]));
+        ASSERT(!bc.matchesSingleElement(match1["a"]));
+        ASSERT(!bc.matchesSingleElement(match2["a"]));
+        ASSERT(!bs.matchesSingleElement(match3["a"]));
+        ASSERT(!bs.matchesSingleElement(match4["a"]));
+    }
+
+    TEST(BitwiseMatchExpression, MatchesBinary1) {
+        BSONArray bas = BSON_ARRAY(1 << 2 << 4 << 5);
+        BSONArray bac = BSON_ARRAY(0 << 3 << 600);
+        std::vector<unsigned int> bitPositionsSet = BSONArrayToBitPositions(bas);
+        std::vector<unsigned int> bitPositionsClear = BSONArrayToBitPositions(bac);
+
+        BSONObj match1 = fromjson("{a: {$binary: 'NgAAAAAAAAAAAAAAAAAAAAAAAAAA', $type: '00'}}");
+                                                 // Base64 to Binary: 00110110...
+        BSONObj match2 = fromjson("{a: {$binary: 'NgAjqwetkqwklEWRbWERKKJREtbq', $type: '00'}}");
+                                                 // Base64 to Binary: 00110110...
+        BSONObj match3 = fromjson("{a: ObjectId('360000000000000000000000')}");
+                                                 // Hex to Binary: 00110110...
 
         BitsSetMatchExpression bs;
         BitsClearMatchExpression bc;
@@ -1748,15 +1810,74 @@ namespace mongo {
         ASSERT(bc.matchesSingleElement(match3["a"]));
     }
 
-    TEST(BitwiseMatchExpression, DoesNotMatchInteger) {
+    TEST(BitwiseMatchExpression, MatchesBinary2) {
+        BSONArray bas = BSON_ARRAY(21 << 22 << 8 << 9);
+        BSONArray bac = BSON_ARRAY(20 << 23 << 612);
+        std::vector<unsigned int> bitPositionsSet = BSONArrayToBitPositions(bas);
+        std::vector<unsigned int> bitPositionsClear = BSONArrayToBitPositions(bac);
+
+        BSONObj match1 = fromjson("{a: {$binary: 'AANgAAAAAAAAAAAAAAAAAAAAAAAA', $type: '00'}}");
+                                                 // Base64 to Binary: 00000000 00000011 01100000
+        BSONObj match2 = fromjson("{a: {$binary: 'JANgqwetkqwklEWRbWERKKJREtbq', $type: '00'}}");
+                                                 // Base64 to Binary: ........ 00000011 01100000
+        BSONObj match3 = fromjson("{a: ObjectId('000360000000000000000000')}");
+                                                 // Hex to Binary: 00000000 00000011 01100000
+
+        BitsSetMatchExpression bs;
+        BitsClearMatchExpression bc;
+
+        ASSERT_OK(bs.init("a", bitPositionsSet));
+        ASSERT_OK(bc.init("a", bitPositionsClear));
+        ASSERT_EQ((size_t)4, bs.bitPositionsCount());
+        ASSERT_EQ((size_t)3, bc.bitPositionsCount());
+        ASSERT(bs.matchesSingleElement(match1["a"]));
+        ASSERT(bs.matchesSingleElement(match2["a"]));
+        ASSERT(bs.matchesSingleElement(match3["a"]));
+        ASSERT(bc.matchesSingleElement(match1["a"]));
+        ASSERT(bc.matchesSingleElement(match2["a"]));
+        ASSERT(bc.matchesSingleElement(match3["a"]));
+    }
+
+    TEST(BitwiseMatchExpression, DoesNotMatchBinary1) {
         BSONArray bas = BSON_ARRAY(1 << 2 << 4 << 5 << 6);
         BSONArray bac = BSON_ARRAY(0 << 3 << 1);
         std::vector<unsigned int> bitPositionsSet = BSONArrayToBitPositions(bas);
         std::vector<unsigned int> bitPositionsClear = BSONArrayToBitPositions(bac);
 
-        BSONObj match1 = fromjson("{a: NumberInt(54)}");
-        BSONObj match2 = fromjson("{a: NumberLong(54)}");
-        BSONObj match3 = fromjson("{a: 54.0}");
+        BSONObj match1 = fromjson("{a: {$binary: 'NgAAAAAAAAAAAAAAAAAAAAAAAAAA', $type: '00'}}");
+                                                // Base64 to Binary: 00110110...
+        BSONObj match2 = fromjson("{a: {$binary: 'NgAjqwetkqwklEWRbWERKKJREtbq', $type: '00'}}");
+                                                // Base64 to Binary: 00110110...
+        BSONObj match3 = fromjson("{a: ObjectId('360000000000000000000000')}");
+                                                // Hex to Binary: 00110110...
+
+        BitsSetMatchExpression bs;
+        BitsClearMatchExpression bc;
+
+        ASSERT_OK(bs.init("a", bitPositionsSet));
+        ASSERT_OK(bc.init("a", bitPositionsClear));
+        ASSERT_EQ((size_t)5, bs.bitPositionsCount());
+        ASSERT_EQ((size_t)3, bc.bitPositionsCount());
+        ASSERT(!bs.matchesSingleElement(match1["a"]));
+        ASSERT(!bs.matchesSingleElement(match2["a"]));
+        ASSERT(!bs.matchesSingleElement(match3["a"]));
+        ASSERT(!bc.matchesSingleElement(match1["a"]));
+        ASSERT(!bc.matchesSingleElement(match2["a"]));
+        ASSERT(!bc.matchesSingleElement(match3["a"]));
+    }
+
+    TEST(BitwiseMatchExpression, DoesNotMatchBinary2) {
+        BSONArray bas = BSON_ARRAY(21 << 22 << 23 << 24 << 25);
+        BSONArray bac = BSON_ARRAY(20 << 23 << 21);
+        std::vector<unsigned int> bitPositionsSet = BSONArrayToBitPositions(bas);
+        std::vector<unsigned int> bitPositionsClear = BSONArrayToBitPositions(bac);
+
+        BSONObj match1 = fromjson("{a: {$binary: 'AANgAAAAAAAAAAAAAAAAAAAAAAAA', $type: '00'}}");
+                                                 // Base64 to Binary: 00000000 00000011 01100000
+        BSONObj match2 = fromjson("{a: {$binary: 'JANgqwetkqwklEWRbWERKKJREtbq', $type: '00'}}");
+                                                 // Base64 to Binary: ........ 00000011 01100000
+        BSONObj match3 = fromjson("{a: ObjectId('000360000000000000000000')}");
+                                                 // Hex to Binary: 00000000 00000011 01100000
 
         BitsSetMatchExpression bs;
         BitsClearMatchExpression bc;
