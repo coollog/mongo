@@ -720,32 +720,58 @@ namespace mongo {
         }
     }
 
-    // void BitwiseMatchExpression::debugString( StringBuilder& debug, int level ) const {
-    //     // _debugAddSpace( debug, level );
-    //     // debug << path() << " $in ";
-    //     // _arrayEntries.debugString(debug);
-    //     // MatchExpression::TagData* td = getTag();
-    //     // if (NULL != td) {
-    //     //     debug << " ";
-    //     //     td->debugString(&debug);
-    //     // }
-    //     // debug << "\n";
-    // }
+    void BitwiseMatchExpression::debugString(StringBuilder& debug, int level) const {
+        _debugAddSpace(debug, level);
 
-    // void BitwiseMatchExpression::toBSON(BSONObjBuilder* out) const {
-    //     // BSONObjBuilder inBob(out->subobjStart(path()));
-    //     // BSONArrayBuilder arrBob(inBob.subarrayStart("$in"));
-    //     // _arrayEntries.toBSON(&arrBob);
-    //     // inBob.doneFast();
-    // }
+        debug << path() << " ";
 
-    // bool BitwiseMatchExpression::equivalent( const MatchExpression* other ) const {
-    //     // if ( matchType() != other->matchType() )
-    //     //     return false;
-    //     // const BitwiseMatchExpression* realOther = static_cast<const BitwiseMatchExpression*>( other );
-    //     // return
-    //     //     path() == realOther->path() &&
-    //     //     _arrayEntries.equivalent( realOther->_arrayEntries );
-    //     return true;
-    // }
+        switch (matchType()) {
+        case BITS_SET: debug << "$bitsSet:"; break;
+        case BITS_CLEAR: debug << "$bitsClear:"; break;
+        default: debug << " UNKNOWN - should be impossible"; break;
+        }
+
+        debug << " [";
+        for (unsigned i = 0; i < _bitPositions.size(); i++) {
+            debug << _bitPositions[i];
+            if (i != _bitPositions.size() - 1) {
+                debug << ", ";
+            }
+        }
+        debug << "]";
+
+        MatchExpression::TagData* td = getTag();
+        if (NULL != td) {
+            debug << " ";
+            td->debugString(&debug);
+        }
+
+        debug << "\n";
+    }
+
+    void BitwiseMatchExpression::toBSON(BSONObjBuilder* out) const {
+        string opString = "";
+
+        switch (matchType()) {
+        case BITS_SET: opString = "$bitsSet"; break;
+        case BITS_CLEAR: opString = "$bitsClear"; break;
+        default: opString = " UNKNOWN - should be impossible"; break;
+        }
+
+        BSONArrayBuilder arrBob;
+        bitPositionsBSONArray(&arrBob);
+
+        out->append(path(), BSON(opString << arrBob.arr()));
+    }
+
+    bool BitwiseMatchExpression::equivalent(const MatchExpression* other) const {
+        if (matchType() != other->matchType()) {
+            return false;
+        }
+
+        const BitwiseMatchExpression* realOther = static_cast<const BitwiseMatchExpression*>(other);
+
+        return path() == realOther->path() &&
+               copyBitPositions() == realOther->copyBitPositions();
+    }
 }

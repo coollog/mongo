@@ -411,13 +411,22 @@ namespace mongo {
 
         virtual bool matchesSingleElement(const BSONElement& e) const;
 
-        virtual void debugString(StringBuilder& debug, int level) const {};
+        virtual void debugString(StringBuilder& debug, int level) const;
 
-        virtual void toBSON(BSONObjBuilder* out) const {};
+        virtual void toBSON(BSONObjBuilder* out) const;
 
-        virtual bool equivalent(const MatchExpression* other) const { return true; };
+        virtual bool equivalent(const MatchExpression* other) const;
 
         size_t bitPositionsCount() const { return _bitPositions.size(); }
+
+        void bitPositionsBSONArray(BSONArrayBuilder* out) const {
+            for (unsigned i = 0; i < _bitPositions.size(); i++) {
+                out->append(_bitPositions[i]);
+            }
+            out->doneFast();
+        };
+
+        std::vector<unsigned int> copyBitPositions() const { return _bitPositions; }
 
     protected:
         std::vector<unsigned int> _bitPositions;
