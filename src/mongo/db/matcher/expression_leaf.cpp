@@ -615,6 +615,9 @@ namespace mongo {
         const char* eBinary; // Binary value of element.
         int eBinaryLen; // Length of eBinary (in bytes).
 
+        /**
+         * Process out the values to bit-check.
+         */
         if (e.isNumber()) {
             double eDouble = e.numberDouble();
 
@@ -623,11 +626,11 @@ namespace mongo {
                 return false;
             }
             // This checks if e is an integral double.
-            // TODO: CHECK IF THIS WORKS
             double intpart;
             if (modf(eDouble, &intpart) != 0.0) {
                 return false;
             }
+
             eValue = e.numberLong();
             isNumber = true;
         }
@@ -635,24 +638,12 @@ namespace mongo {
             // If e is binary data, it is arbitrary length, so we use 64-bit vectors.
 
             eBinary = e.binData(eBinaryLen);
-// printf("\nBinary Data: '");
-//                     for (int j = 0; j < eBinaryLen; j ++) {
-//                         unsigned char B = eBinary[j];
-// printf("%d|", B);
-//                     }
-// printf("'\n");
         }
         else if (e.type() == jstOID) {
             // Same with ObjectId()'s
 
             eBinary = e.value();
             eBinaryLen = e.valuesize();
-// printf("\nBinary Data: '");
-//                     for (int j = 0; j < eBinaryLen; j ++) {
-//                         unsigned char B = eBinary[j];
-// printf("%d|", B);
-//                     }
-// printf("'\n");
         }
         else if (e.type() == Date) {
             // If e is a Date or Timestamp
@@ -664,7 +655,9 @@ namespace mongo {
             return false;
         }
 
-        // TODO: COMPLETE THIS CODE
+        /**
+         * Perform the bit-checks.
+         */
         MatchType mt = matchType();
         switch (mt) {
         case BITS_SET:
@@ -674,25 +667,20 @@ namespace mongo {
                 int bitPosition = _bitPositions[i];
 
                 if (isNumber) {
-                    if (mt == BITS_SET) {
-                        if (bitPosition >= 64) {
+                    if (bitPosition >= 64) {
+                        if (mt == BITS_SET) {
                             // Cannot check for more than 64-bits.
                             return false;
                         }
-                        if (!(eValue & (1 << bitPosition))) {
-                            // If bit is not set, return false.
-                            return false;
-                        }
-                    }
-                    else if (mt == BITS_CLEAR) {
-                        if (bitPosition >= 64) {
+                        else if (mt == BITS_CLEAR) {
                             // Assume to be zero.
                             continue;
                         }
-                        if (eValue & (1 << bitPosition)) {
-                            // If bit is set, return false.
-                            return false;
-                        }
+                    }
+
+                    if ((mt == BITS_SET && !checkBit(eValue, bitPosition)) || // Bit isn't set.
+                        (mt == BITS_CLEAR && checkBit(eValue, bitPosition))) { // Bit isn't clear.
+                        return false;
                     }
                 }
                 else {
@@ -713,21 +701,12 @@ namespace mongo {
                      * still little-endian
                      */
                     int bytePosition = bitPosition >> 3; // bitPosition / 8
-                    int bp = bitPosition - (bytePosition << 3); // bitPosition % 8
-// printf("\nbytePos: %d | bitPos: %d\n", bytePosition, bp);
+                    int bit = bitPosition - (bytePosition << 3); // bitPosition % 8
+                    unsigned char byte = eBinary[bytePosition];
 
-                    unsigned char B = eBinary[bytePosition];
-                    if (mt == BITS_SET) {
-                        if (!(B & (1 << bp))) {
-                            // If bit is not set, return false.
-                            return false;
-                        }
-                    }
-                    else if (mt == BITS_CLEAR) {
-                        if (B & (1 << bp)) {
-                            // If bit is set, return false.
-                            return false;
-                        }
+                    if ((mt == BITS_SET && !checkBit(byte, bit)) || // Bit isn't set.
+                        (mt == BITS_CLEAR && checkBit(byte, bit))) { // Bit isn't clear.
+                        return false;
                     }
                 }
             }

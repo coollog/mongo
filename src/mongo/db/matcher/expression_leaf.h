@@ -421,6 +421,8 @@ namespace mongo {
 
     protected:
         std::vector<unsigned int> _bitPositions;
+
+        inline bool checkBit(unsigned char byte, int bit) const { return byte & (1 << bit); }
     };
 
     /**
