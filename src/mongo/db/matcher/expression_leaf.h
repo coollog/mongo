@@ -428,6 +428,8 @@ namespace mongo {
         };
 
         std::vector<int> copyBitPositions() const { return _bitPositions; }
+        bool useBitMask() const { return _useBitMask; }
+        long long bitMask() const { return _bitMask; }
 
     protected:
         bool _useBitMask; // Flag to use bitmask or not (use bit positions).

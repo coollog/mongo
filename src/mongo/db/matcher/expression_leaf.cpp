@@ -672,7 +672,6 @@ namespace mongo {
         case BITS_SET:
         case BITS_CLEAR:
             if (_useBitMask) {
-printf("\nUSINGBITMASK: %llu on %llu\n", _bitMask, eValue);
                 if (mt == BITS_SET) {
                     return _bitMask == (eValue & _bitMask);
                 }
@@ -791,6 +790,8 @@ printf("\nUSINGBITMASK: %llu on %llu\n", _bitMask, eValue);
         const BitwiseMatchExpression* realOther = static_cast<const BitwiseMatchExpression*>(other);
 
         return path() == realOther->path() &&
-               copyBitPositions() == realOther->copyBitPositions();
+               copyBitPositions() == realOther->copyBitPositions() &&
+               _useBitMask == realOther->useBitMask() &&
+               _bitMask == realOther->bitMask();
     }
 }
