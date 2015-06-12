@@ -773,7 +773,7 @@ namespace mongo {
         switch (matchType()) {
         case BITS_SET: opString = "$bitsSet"; break;
         case BITS_CLEAR: opString = "$bitsClear"; break;
-        default: opString = " UNKNOWN - should be impossible"; break;
+        default: opString = "UNKNOWN - should be impossible"; break;
         }
 
         BSONArrayBuilder arrBob;
