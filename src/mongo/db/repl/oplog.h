@@ -50,7 +50,7 @@ namespace mongo {
 
 namespace repl {
     class ReplicationCoordinator;
- 
+
     // Create a new capped collection for the oplog if it doesn't yet exist.
     // This will be either local.oplog.rs (replica sets) or local.oplog.$main (master/slave)
     // If the collection already exists, set the 'last' OpTime if master/slave (side effect!)
@@ -68,7 +68,7 @@ namespace repl {
 
     extern int OPLOG_VERSION;
 
-    /** Log an operation to the local oplog 
+    /** Log an operation to the local oplog
      *
      * @param opstr
      *  "i" insert
@@ -109,11 +109,6 @@ namespace repl {
      * Returns failure status if the op that could not be applied.
      */
     Status applyCommand_inlock(OperationContext* txn, const BSONObj& op);
-
-    /**
-     * Waits up to one second for the Timestamp from the oplog to change.
-     */
-    void waitUpToOneSecondForTimestampChange(const Timestamp& referenceTime);
 
     /**
      * Initializes the global Timestamp with the value from the timestamp of the last oplog entry.

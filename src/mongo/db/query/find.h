@@ -154,7 +154,6 @@ namespace mongo {
                               const char* ns,
                               int ntoreturn,
                               long long cursorid,
-                              int pass,
                               bool& exhaust,
                               bool* isCursorAuthorized);
 

@@ -495,15 +495,15 @@ namespace {
                 }
             }
         },
-        {"dropDatabase", 
+        {"dropDatabase",
             {
                 [](OperationContext* txn, const char* ns, BSONObj& cmd) -> Status {
                     return dropDatabase(txn, NamespaceString(ns).db().toString());
                 },
-                {ErrorCodes::DatabaseNotFound} 
+                {ErrorCodes::DatabaseNotFound}
             }
         },
-        {"drop", 
+        {"drop",
             {
                 [](OperationContext* txn, const char* ns, BSONObj& cmd) -> Status {
                     BSONObjBuilder resultWeDontCareAbout;
@@ -515,7 +515,7 @@ namespace {
             }
         },
         // deleteIndex(es) is deprecated but still works as of April 10, 2015
-        {"deleteIndex", 
+        {"deleteIndex",
             {
                 [](OperationContext* txn, const char* ns, BSONObj& cmd) -> Status {
                     BSONObjBuilder resultWeDontCareAbout;
@@ -524,7 +524,7 @@ namespace {
                 {ErrorCodes::NamespaceNotFound, ErrorCodes::IndexNotFound}
             }
         },
-        {"deleteIndexes", 
+        {"deleteIndexes",
             {
                 [](OperationContext* txn, const char* ns, BSONObj& cmd) -> Status {
                     BSONObjBuilder resultWeDontCareAbout;
@@ -542,7 +542,7 @@ namespace {
                 {ErrorCodes::NamespaceNotFound, ErrorCodes::IndexNotFound}
             }
         },
-        {"dropIndexes", 
+        {"dropIndexes",
             {
                 [](OperationContext* txn, const char* ns, BSONObj& cmd) -> Status {
                     BSONObjBuilder resultWeDontCareAbout;
@@ -743,9 +743,9 @@ namespace {
                     // Otherwise, it's present; zero objects were updated because of additional specifiers
                     // in the query for idempotence
                 }
-                else { 
+                else {
                     // this could happen benignly on an oplog duplicate replay of an upsert
-                    // (because we are idempotent), 
+                    // (because we are idempotent),
                     // if an regular non-mod update fails the item is (presumably) missing.
                     if( !upsert ) {
                         string msg = str::stream() << "update of non-mod failed: " << op.toString();
@@ -810,7 +810,7 @@ namespace {
         // Applying commands in repl is done under Global W-lock, so it is safe to not
         // perform the current DB checks after reacquiring the lock.
         invariant(txn->lockState()->isW());
-        
+
         bool done = false;
 
         while (!done) {
@@ -869,15 +869,6 @@ namespace {
         wuow.commit();
 
         return Status::OK();
-    }
-
-    void waitUpToOneSecondForTimestampChange(const Timestamp& referenceTime) {
-        stdx::unique_lock<stdx::mutex> lk(newOpMutex);
-
-        while (referenceTime == getLastSetTimestamp()) {
-            if (!newTimestampNotifier.timed_wait(lk, boost::posix_time::seconds(1)))
-                return;
-        }
     }
 
     void setNewTimestamp(const Timestamp& newTime) {
