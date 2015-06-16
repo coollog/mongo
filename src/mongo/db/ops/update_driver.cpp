@@ -173,18 +173,19 @@ namespace mongo {
     Status UpdateDriver::populateDocumentWithQueryFields(const BSONObj& query,
                                                          const vector<FieldRef*>* immutablePaths,
                                                          mutablebson::Document& doc) const {
-        CanonicalQuery* rawCG;
         // We canonicalize the query to collapse $and/$or, and the first arg (ns) is not needed
         // Also, because this is for the upsert case, where we insert a new document if one was
         // not found, the $where clause does not make sense, hence empty WhereCallback.
-        Status s = CanonicalQuery::canonicalize("", query, &rawCG, WhereCallbackNoop());
-        if (!s.isOK())
-            return s;
-        unique_ptr<CanonicalQuery> cq(rawCG);
-        return populateDocumentWithQueryFields(rawCG, immutablePaths, doc);
+        auto statusWithCQ = CanonicalQuery::canonicalize("", query, WhereCallbackNoop());
+        if (!statusWithCQ.isOK()) {
+            return statusWithCQ.getStatus();
+        }
+        unique_ptr<CanonicalQuery> cq = std::move(statusWithCQ.getValue());
+
+        return populateDocumentWithQueryFields(*cq, immutablePaths, doc);
     }
 
-    Status UpdateDriver::populateDocumentWithQueryFields(const CanonicalQuery* query,
+    Status UpdateDriver::populateDocumentWithQueryFields(const CanonicalQuery& query,
                                                          const vector<FieldRef*>* immutablePathsPtr,
                                                          mutablebson::Document& doc) const {
         EqualityMatches equalities;
@@ -204,13 +205,13 @@ namespace mongo {
             pathsToExtract.insert(&idPath);
 
             // Extract only immutable fields from replacement-style
-            status = pathsupport::extractFullEqualityMatches(*query->root(),
+            status = pathsupport::extractFullEqualityMatches(*query.root(),
                                                              pathsToExtract,
                                                              &equalities);
         }
         else {
             // Extract all fields from op-style
-            status = pathsupport::extractEqualityMatches(*query->root(), &equalities);
+            status = pathsupport::extractEqualityMatches(*query.root(), &equalities);
         }
 
         if (!status.isOK())

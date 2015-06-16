@@ -182,7 +182,7 @@ namespace mongo {
 
         QuerySettings* querySettings;
         PlanCache* unused;
-        Status status = 
+        Status status =
             getQuerySettingsAndPlanCache(txn, ctx.getCollection(), ns, &querySettings, &unused);
         if (!status.isOK()) {
             // No collection - return empty array of filters.
@@ -267,13 +267,12 @@ namespace mongo {
         // - clear hints for single query shape when a query shape is described in the
         //   command arguments.
         if (cmdObj.hasField("query")) {
-            CanonicalQuery* cqRaw;
-            Status status = PlanCacheCommand::canonicalize(txn, ns, cmdObj, &cqRaw);
-            if (!status.isOK()) {
-                return status;
+            auto statusWithCQ = PlanCacheCommand::canonicalize(txn, ns, cmdObj);
+            if (!statusWithCQ.isOK()) {
+                return statusWithCQ.getStatus();
             }
 
-            unique_ptr<CanonicalQuery> cq(cqRaw);
+            unique_ptr<CanonicalQuery> cq = std::move(statusWithCQ.getValue());
             querySettings->removeAllowedIndices(planCache->computeKey(*cq));
 
             // Remove entry from plan cache
@@ -315,11 +314,10 @@ namespace mongo {
             invariant(entry);
 
             // Create canonical query.
-            CanonicalQuery* cqRaw;
-            Status result = CanonicalQuery::canonicalize(
-                    ns, entry->query, entry->sort, entry->projection, &cqRaw, whereCallback);
-            invariant(result.isOK());
-            unique_ptr<CanonicalQuery> cq(cqRaw);
+            auto statusWithCQ = CanonicalQuery::canonicalize(
+                            ns, entry->query, entry->sort, entry->projection, whereCallback);
+            invariant(statusWithCQ.isOK());
+            std::unique_ptr<CanonicalQuery> cq = std::move(statusWithCQ.getValue());
 
             // Remove plan cache entry.
             planCache->remove(*cq);
@@ -382,12 +380,11 @@ namespace mongo {
             indexes.push_back(obj.getOwned());
         }
 
-        CanonicalQuery* cqRaw;
-        Status status = PlanCacheCommand::canonicalize(txn, ns, cmdObj, &cqRaw);
-        if (!status.isOK()) {
-            return status;
+        auto statusWithCQ = PlanCacheCommand::canonicalize(txn, ns, cmdObj);
+        if (!statusWithCQ.isOK()) {
+            return statusWithCQ.getStatus();
         }
-        unique_ptr<CanonicalQuery> cq(cqRaw);
+        unique_ptr<CanonicalQuery> cq = std::move(statusWithCQ.getValue());
 
         // Add allowed indices to query settings, overriding any previous entries.
         querySettings->setAllowedIndices(*cq, planCache->computeKey(*cq), indexes);

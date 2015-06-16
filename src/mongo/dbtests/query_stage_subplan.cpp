@@ -83,9 +83,9 @@ namespace QueryStageSubplan {
             BSONObj query = fromjson("{$or: [{a: {$geoWithin: {$centerSphere: [[0,0],10]}}},"
                                             "{a: {$geoWithin: {$centerSphere: [[1,1],10]}}}]}");
 
-            CanonicalQuery* rawCq;
-            ASSERT_OK(CanonicalQuery::canonicalize(ns(), query, &rawCq));
-            std::unique_ptr<CanonicalQuery> cq(rawCq);
+            auto statusWithCQ = CanonicalQuery::canonicalize(ns(), query);
+            ASSERT_OK(statusWithCQ.getStatus());
+            std::unique_ptr<CanonicalQuery> cq = std::move(statusWithCQ.getValue());
 
             Collection* collection = ctx.getCollection();
 
@@ -126,9 +126,9 @@ namespace QueryStageSubplan {
 
             Collection* collection = ctx.getCollection();
 
-            CanonicalQuery* rawCq;
-            ASSERT_OK(CanonicalQuery::canonicalize(ns(), query, &rawCq));
-            std::unique_ptr<CanonicalQuery> cq(rawCq);
+            auto statusWithCQ = CanonicalQuery::canonicalize(ns(), query);
+            ASSERT_OK(statusWithCQ.getStatus());
+            std::unique_ptr<CanonicalQuery> cq = std::move(statusWithCQ.getValue());
 
             // Get planner params.
             QueryPlannerParams plannerParams;

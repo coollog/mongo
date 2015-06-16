@@ -442,7 +442,7 @@ namespace mongo {
                 OldClientWriteContext tempCtx(_txn, _config.tempNamespace);
                 WriteUnitOfWork wuow(_txn);
                 NamespaceString tempNss(_config.tempNamespace);
-                uassert(ErrorCodes::NotMaster, "no longer master", 
+                uassert(ErrorCodes::NotMaster, "no longer master",
                         repl::getGlobalReplicationCoordinator()->canAcceptWritesFor(tempNss));
                 Collection* tempColl = tempCtx.getCollection();
                 invariant(!tempColl);
@@ -613,7 +613,7 @@ namespace mongo {
                                       , info ) ) {
                     uasserted( 10076 ,  str::stream() << "rename failed: " << info );
                 }
-                         
+
                 _db.dropCollection( _config.tempNamespace );
             }
             else if ( _config.outputOptions.outType == Config::MERGE ) {
@@ -699,7 +699,7 @@ namespace mongo {
             OldClientWriteContext ctx(_txn,  ns );
             WriteUnitOfWork wuow(_txn);
             NamespaceString nss(ns);
-            uassert(ErrorCodes::NotMaster, "no longer master", 
+            uassert(ErrorCodes::NotMaster, "no longer master",
                     repl::getGlobalReplicationCoordinator()->canAcceptWritesFor(nss));
             Collection* coll = getCollectionOrUassert(ctx.db(), ns);
 
@@ -1040,14 +1040,13 @@ namespace mongo {
             const NamespaceString nss(_config.incLong);
             const WhereCallbackReal whereCallback(_txn, nss.db());
 
-            CanonicalQuery* cqRaw;
-            verify(CanonicalQuery::canonicalize(_config.incLong,
-                                                BSONObj(),
-                                                sortKey,
-                                                BSONObj(),
-                                                &cqRaw,
-                                                whereCallback).isOK());
-            std::unique_ptr<CanonicalQuery> cq(cqRaw);
+            auto statusWithCQ = CanonicalQuery::canonicalize(_config.incLong,
+                                                             BSONObj(),
+                                                             sortKey,
+                                                             BSONObj(),
+                                                             whereCallback);
+            verify(statusWithCQ.isOK());
+            std::unique_ptr<CanonicalQuery> cq = std::move(statusWithCQ.getValue());
 
             Collection* coll = getCollectionOrUassert(ctx->getDb(), _config.incLong);
             invariant(coll);
@@ -1237,7 +1236,7 @@ namespace mongo {
         BSONObj fast_emit( const BSONObj& args, void* data ) {
             uassert( 10077 , "fast_emit takes 2 args" , args.nFields() == 2 );
             uassert( 13069 , "an emit can't be more than half max bson size" , args.objsize() < ( BSONObjMaxUserSize / 2 ) );
-            
+
             State* state = (State*) data;
             if ( args.firstElement().type() == Undefined ) {
                 BSONObjBuilder b( args.objsize() );
@@ -1405,17 +1404,17 @@ namespace mongo {
 
                         const WhereCallbackReal whereCallback(txn, nss.db());
 
-                        CanonicalQuery* cqRaw;
-                        if (!CanonicalQuery::canonicalize(config.ns,
-                                                          config.filter,
-                                                          config.sort,
-                                                          BSONObj(),
-                                                          &cqRaw,
-                                                          whereCallback).isOK()) {
-                            uasserted(17238, "Can't canonicalize query " + config.filter.toString());
+                        auto statusWithCQ = CanonicalQuery::canonicalize(config.ns,
+                                                                         config.filter,
+                                                                         config.sort,
+                                                                         BSONObj(),
+                                                                         whereCallback);
+                        if (!statusWithCQ.isOK()) {
+                            uasserted(17238, "Can't canonicalize query " +
+                                             config.filter.toString());
                             return 0;
                         }
-                        std::unique_ptr<CanonicalQuery> cq(cqRaw);
+                        std::unique_ptr<CanonicalQuery> cq = std::move(statusWithCQ.getValue());
 
                         Database* db = scopedAutoDb->getDb();
                         Collection* coll = state.getCollectionOrUassert(db, config.ns);
@@ -1454,7 +1453,7 @@ namespace mongo {
                             if ( config.verbose ) mapTime += mt.micros();
 
                             // Check if the state accumulated so far needs to be written to a
-                            // collection. This may yield the DB lock temporarily and then 
+                            // collection. This may yield the DB lock temporarily and then
                             // acquire it again.
                             //
                             numInputs++;

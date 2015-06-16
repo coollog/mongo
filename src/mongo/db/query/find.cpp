@@ -62,7 +62,6 @@
 #include "mongo/util/mongoutils/str.h"
 
 using std::unique_ptr;
-using std::unique_ptr;
 using std::endl;
 
 namespace mongo {
@@ -246,8 +245,8 @@ namespace mongo {
     /**
      * Called by db/instance.cpp.  This is the getMore entry point.
      *
-     * pass - when QueryOption_AwaitData is in use, the caller will make repeated calls 
-     *        when this method returns an empty result, incrementing pass on each call.  
+     * pass - when QueryOption_AwaitData is in use, the caller will make repeated calls
+     *        when this method returns an empty result, incrementing pass on each call.
      *        Thus, pass == 0 indicates this is the first "attempt" before any 'awaiting'.
      */
     QueryResult::View getMore(OperationContext* txn,
@@ -285,9 +284,9 @@ namespace mongo {
         // Note that we declare our locks before our ClientCursorPin, in order to ensure that the
         // pin's destructor is called before the lock destructors (so that the unpin occurs under
         // the lock).
-        std::unique_ptr<AutoGetCollectionForRead> ctx;
-        std::unique_ptr<Lock::DBLock> unpinDBLock;
-        std::unique_ptr<Lock::CollectionLock> unpinCollLock;
+        unique_ptr<AutoGetCollectionForRead> ctx;
+        unique_ptr<Lock::DBLock> unpinDBLock;
+        unique_ptr<Lock::CollectionLock> unpinCollLock;
 
         CursorManager* cursorManager;
         CursorManager* globalCursorManager = CursorManager::getGlobalCursorManager();
@@ -326,7 +325,7 @@ namespace mongo {
         // has a valid RecoveryUnit.  As such, we use RAII to accomplish this.
         //
         // This must be destroyed before the ClientCursor is destroyed.
-        std::unique_ptr<ScopedRecoveryUnitSwapper> ruSwapper;
+        unique_ptr<ScopedRecoveryUnitSwapper> ruSwapper;
 
         // These are set in the QueryResult msg we return.
         int resultFlags = ResultFlag_AwaitCapable;
@@ -385,8 +384,8 @@ namespace mongo {
                 curop.setQuery_inlock(cc->getQuery());
             }
 
-            if (0 == pass) { 
-                cc->updateSlaveLocation(txn); 
+            if (0 == pass) {
+                cc->updateSlaveLocation(txn);
             }
 
             if (cc->isAggCursor()) {
@@ -431,7 +430,7 @@ namespace mongo {
 
             if (PlanExecutor::DEAD == state || PlanExecutor::FAILURE == state) {
                 // Propagate this error to caller.
-                const std::unique_ptr<PlanStageStats> stats(exec->getStats());
+                const unique_ptr<PlanStageStats> stats(exec->getStats());
                 error() << "getMore executor error, stats: "
                         << Explain::statsToBSON(*stats);
                 uasserted(17406, "getMore executor error: " +
@@ -529,18 +528,13 @@ namespace mongo {
         beginQueryOp(txn, nss, q.query, q.ntoreturn, q.ntoskip);
 
         // Parse the qm into a CanonicalQuery.
-        std::unique_ptr<CanonicalQuery> cq;
-        {
-            CanonicalQuery* cqRaw;
-            Status canonStatus = CanonicalQuery::canonicalize(q,
-                                                              &cqRaw,
-                                                              WhereCallbackReal(txn, nss.db()));
-            if (!canonStatus.isOK()) {
-                uasserted(17287, str::stream() << "Can't canonicalize query: "
-                                               << canonStatus.toString());
-            }
-            cq.reset(cqRaw);
+
+        auto statusWithCQ = CanonicalQuery::canonicalize(q, WhereCallbackReal(txn, nss.db()));
+        if (!statusWithCQ.isOK()) {
+            uasserted(17287, str::stream() << "Can't canonicalize query: "
+                                           << statusWithCQ.getStatus().toString());
         }
+        unique_ptr<CanonicalQuery> cq = std::move(statusWithCQ.getValue());
         invariant(cq.get());
 
         LOG(5) << "Running query:\n" << cq->toString();
@@ -554,7 +548,7 @@ namespace mongo {
                                                    serverGlobalParams.defaultProfile;
 
         // We have a parsed query. Time to get the execution plan for it.
-        std::unique_ptr<PlanExecutor> exec;
+        unique_ptr<PlanExecutor> exec;
         {
             PlanExecutor* rawExec;
             Status execStatus = getExecutorFind(txn,
@@ -667,7 +661,7 @@ namespace mongo {
 
         // Caller expects exceptions thrown in certain cases.
         if (PlanExecutor::FAILURE == state || PlanExecutor::DEAD == state) {
-            const std::unique_ptr<PlanStageStats> stats(exec->getStats());
+            const unique_ptr<PlanStageStats> stats(exec->getStats());
             error() << "Plan executor error during find: " << PlanExecutor::statestr(state)
                     << ", stats: " << Explain::statsToBSON(*stats);
             uasserted(17144, "Executor error: " + WorkingSetCommon::toStatusString(obj));

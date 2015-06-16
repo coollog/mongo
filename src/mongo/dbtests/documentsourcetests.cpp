@@ -52,6 +52,7 @@ namespace DocumentSourceTests {
     using std::map;
     using std::set;
     using std::string;
+    using std::unique_ptr;
     using std::vector;
 
     static const char* const ns = "unittests.documentsourcetests";
@@ -172,8 +173,8 @@ namespace DocumentSourceTests {
 
         class Base : public CollectionBase {
         public:
-            Base() : _ctx(new ExpressionContext(&_opCtx, NamespaceString(ns))) { 
-                _ctx->tempDir = storageGlobalParams.dbpath + "/_tmp"; 
+            Base() : _ctx(new ExpressionContext(&_opCtx, NamespaceString(ns))) {
+                _ctx->tempDir = storageGlobalParams.dbpath + "/_tmp";
             }
 
         protected:
@@ -183,12 +184,13 @@ namespace DocumentSourceTests {
                 _exec.reset();
 
                 OldClientWriteContext ctx(&_opCtx, ns);
-                CanonicalQuery* cq;
-                uassertStatusOK(CanonicalQuery::canonicalize(ns, /*query=*/BSONObj(), &cq));
+                auto statusWithCQ = CanonicalQuery::canonicalize(ns, /*query=*/BSONObj());
+                uassertStatusOK(statusWithCQ.getStatus());
+                unique_ptr<CanonicalQuery> cq = std::move(statusWithCQ.getValue());
                 PlanExecutor* execBare;
                 uassertStatusOK(getExecutor(&_opCtx,
                                             ctx.getCollection(),
-                                            cq,
+                                            cq.release(),
                                             PlanExecutor::YIELD_MANUAL,
                                             &execBare));
 
@@ -255,7 +257,7 @@ namespace DocumentSourceTests {
                 ASSERT( !source()->getNext() );
             }
         };
-        
+
         /** Iterate a DocumentSourceCursor and then dispose of it. */
         class IterateDispose : public Base {
         public:
@@ -533,10 +535,10 @@ namespace DocumentSourceTests {
         class IdInvalidObjectExpression : public ParseErrorBase {
             BSONObj spec() { return BSON( "_id" << BSON( "$add" << 1 << "$and" << 1 ) ); }
         };
-        
+
         /** $group with two _id specs. */
         class TwoIdSpecs : public ParseErrorBase {
-            BSONObj spec() { return BSON( "_id" << 1 << "_id" << 2 ); }            
+            BSONObj spec() { return BSON( "_id" << 1 << "_id" << 2 ); }
         };
 
         /** $group _id is the empty string. */
@@ -560,7 +562,7 @@ namespace DocumentSourceTests {
         class IdInvalidFieldPath : public ParseErrorBase {
             BSONObj spec() { return BSON( "_id" << "$a.." ); }
         };
-        
+
         /** $group _id is a numeric constant. */
         class IdNumericConstant : public IdConstantBase {
             BSONObj spec() { return BSON( "_id" << 2 ); }
@@ -585,22 +587,22 @@ namespace DocumentSourceTests {
         class NonObjectAggregateSpec : public ParseErrorBase {
             BSONObj spec() { return BSON( "_id" << 1 << "a" << 1 ); }
         };
-        
+
         /** An aggregate field spec that is not an object. */
         class EmptyObjectAggregateSpec : public ParseErrorBase {
             BSONObj spec() { return BSON( "_id" << 1 << "a" << BSONObj() ); }
         };
-        
+
         /** An aggregate field spec with an invalid accumulator operator. */
         class BadAccumulator : public ParseErrorBase {
             BSONObj spec() { return BSON( "_id" << 1 << "a" << BSON( "$bad" << 1 ) ); }
         };
-        
+
         /** An aggregate field spec with an array argument. */
         class SumArray : public ParseErrorBase {
             BSONObj spec() { return BSON( "_id" << 1 << "a" << BSON( "$sum" << BSONArray() ) ); }
         };
-        
+
         /** Multiple accumulator operators for a field. */
         class MultipleAccumulatorsForAField : public ParseErrorBase {
             BSONObj spec() {
@@ -699,7 +701,7 @@ namespace DocumentSourceTests {
                 }
                 // Verify the DocumentSourceGroup is exhausted.
                 assertExhausted( sink );
-                
+
                 // Convert results to BSON once they all have been retrieved (to detect any errors
                 // resulting from incorrectly shared sub objects).
                 BSONArrayBuilder bsonResultSet;
@@ -737,7 +739,7 @@ namespace DocumentSourceTests {
             }
             virtual string expectedResultSetString() { return "[{_id:0,a:[1,2]}]"; }
         };
-        
+
         /** A $group performed on two values with one key each. */
         class TwoValuesTwoKeys : public CheckResultsBase {
             void populateData() {
@@ -749,7 +751,7 @@ namespace DocumentSourceTests {
             }
             virtual string expectedResultSetString() { return "[{_id:0,a:[1]},{_id:1,a:[2]}]"; }
         };
-        
+
         /** A $group performed on two values with two keys each. */
         class FourValuesTwoKeys : public CheckResultsBase {
             void populateData() {
@@ -827,7 +829,7 @@ namespace DocumentSourceTests {
             virtual string expectedResultSetString() { return "[{_id:0, first:null}]"; }
         };
 
-        /** Simulate merging sharded results in the router. */ 
+        /** Simulate merging sharded results in the router. */
         class RouterMerger : public CheckResultsBase {
         public:
             void run() {
@@ -997,7 +999,7 @@ namespace DocumentSourceTests {
                 ASSERT_THROWS( createProject( BSON( "$add" << BSONArray() ) ), UserException );
             }
         };
-        
+
         /** Projection spec is invalid. */
         class InvalidSpec : public Base {
         public:
@@ -1052,13 +1054,13 @@ namespace DocumentSourceTests {
                 ASSERT_EQUALS( true, dependencies.needTextScore );
             }
         };
-        
+
     } // namespace DocumentSourceProject
 
     namespace DocumentSourceSort {
-        
+
         using mongo::DocumentSourceSort;
-        
+
         class Base : public DocumentSourceCursor::Base {
         protected:
             void createSort( const BSONObj& sortKey = BSON( "a" << 1 ) ) {
@@ -1134,7 +1136,7 @@ namespace DocumentSourceTests {
                 populateData();
                 createSource();
                 createSort( sortSpec() );
-                
+
                 // Load the results from the DocumentSourceUnwind.
                 vector<Document> resultSet;
                 while (boost::optional<Document> current = sort()->getNext()) {
@@ -1143,7 +1145,7 @@ namespace DocumentSourceTests {
                 }
                 // Verify the DocumentSourceUnwind is exhausted.
                 assertExhausted();
-                
+
                 // Convert results to BSON once they all have been retrieved (to detect any errors
                 // resulting from incorrectly shared sub objects).
                 BSONArrayBuilder bsonResultSet;
@@ -1209,7 +1211,7 @@ namespace DocumentSourceTests {
             }
             string expectedResultSetString() { return "[{_id:0,a:1}]"; }
         };
-        
+
         /** Sort two documents. */
         class TwoValues : public CheckResultsBase {
             void populateData() {
@@ -1234,12 +1236,12 @@ namespace DocumentSourceTests {
         class EmptyObjectSpec : public InvalidSpecBase {
             BSONObj sortSpec() { return BSONObj(); }
         };
-        
+
         /** Sort spec value is not a number. */
         class NonNumberDirectionSpec : public InvalidSpecBase {
             BSONObj sortSpec() { return BSON( "a" << "b" ); }
         };
-        
+
         /** Sort spec value is not a valid number. */
         class InvalidNumberDirectionSpec : public InvalidSpecBase {
             BSONObj sortSpec() { return BSON( "a" << 0 ); }
@@ -1254,7 +1256,7 @@ namespace DocumentSourceTests {
             string expectedResultSetString() { return "[{_id:0,a:2},{_id:1,a:1}]"; }
             virtual BSONObj sortSpec() { return BSON( "a" << -1 ); }
         };
-        
+
         /** Sort spec with a dotted field. */
         class DottedSortField : public CheckResultsBase {
             void populateData() {
@@ -1264,7 +1266,7 @@ namespace DocumentSourceTests {
             string expectedResultSetString() { return "[{_id:1,a:{b:1}},{_id:0,a:{b:2}}]"; }
             virtual BSONObj sortSpec() { return BSON( "a.b" << 1 ); }
         };
-        
+
         /** Sort spec with a compound key. */
         class CompoundSortSpec : public CheckResultsBase {
             void populateData() {
@@ -1277,7 +1279,7 @@ namespace DocumentSourceTests {
             }
             virtual BSONObj sortSpec() { return BSON( "a" << 1 << "b" << 1 ); }
         };
-        
+
         /** Sort spec with a compound key and descending order. */
         class CompoundSortSpecAlternateOrder : public CheckResultsBase {
             void populateData() {
@@ -1290,7 +1292,7 @@ namespace DocumentSourceTests {
             }
             virtual BSONObj sortSpec() { return BSON( "a" << -1 << "b" << 1 ); }
         };
-        
+
         /** Sort spec with a compound key and descending order. */
         class CompoundSortSpecAlternateOrderSecondField : public CheckResultsBase {
             void populateData() {
@@ -1336,7 +1338,7 @@ namespace DocumentSourceTests {
                 return "[{_id:1},{_id:0,a:1}]";
             }
         };
-        
+
         /** Ordering of a null value. */
         class NullValue : public CheckResultsBase {
             void populateData() {
@@ -1386,7 +1388,7 @@ namespace DocumentSourceTests {
                 ASSERT_EQUALS( false, dependencies.needTextScore );
             }
         };
-        
+
     } // namespace DocumentSourceSort
 
     namespace DocumentSourceUnwind {
@@ -1818,7 +1820,7 @@ namespace DocumentSourceTests {
 
                         test(string("{a: {") + op + ": null}}",
                              "{}");
-                        
+
                         test(string("{a: {") + op + ": {}}}",
                              "{}");
 

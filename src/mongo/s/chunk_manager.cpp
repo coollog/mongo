@@ -55,14 +55,14 @@
 
 namespace mongo {
 
-    using std::shared_ptr;
-
     using std::make_pair;
     using std::map;
     using std::max;
     using std::pair;
     using std::set;
+    using std::shared_ptr;
     using std::string;
+    using std::unique_ptr;
     using std::vector;
 
 namespace {
@@ -393,7 +393,7 @@ namespace {
         ChunkVersion version;
         version.incEpoch();
         version.incMajor();
-        
+
         log() << "going to create " << splitPoints.size() + 1 << " chunk(s) for: " << _ns
               << " using new epoch " << version.epoch() ;
 
@@ -463,19 +463,14 @@ namespace {
     }
 
     void ChunkManager::getShardIdsForQuery(set<ShardId>& shardIds, const BSONObj& query) const {
-        CanonicalQuery* canonicalQuery = NULL;
-        Status status = CanonicalQuery::canonicalize(
-                            _ns,
-                            query,
-                            &canonicalQuery,
-                            WhereCallbackNoop());
-                            
-        std::unique_ptr<CanonicalQuery> canonicalQueryPtr(canonicalQuery);
-        
-        uassert(status.code(), status.reason(), status.isOK());
+        auto statusWithCQ = CanonicalQuery::canonicalize(_ns, query, WhereCallbackNoop());
+
+        unique_ptr<CanonicalQuery> cq = std::move(statusWithCQ.getValue());
+
+        uassertStatusOK(statusWithCQ.getStatus());
 
         // Query validation
-        if (QueryPlannerCommon::hasNode(canonicalQuery->root(), MatchExpression::GEO_NEAR)) {
+        if (QueryPlannerCommon::hasNode(cq->root(), MatchExpression::GEO_NEAR)) {
             uassert(13501, "use geoNear command rather than $near query", false);
         }
 
@@ -485,7 +480,7 @@ namespace {
         //   Query { a : { $gte : 1, $lt : 2 },
         //            b : { $gte : 3, $lt : 4 } }
         //   => Bounds { a : [1, 2), b : [3, 4) }
-        IndexBounds bounds = getIndexBoundsForQuery(_keyPattern.toBSON(), canonicalQuery);
+        IndexBounds bounds = getIndexBoundsForQuery(_keyPattern.toBSON(), *cq);
 
         // Transforms bounds for each shard key field into full shard key ranges
         // for example :
@@ -539,12 +534,13 @@ namespace {
         all->insert(_shardIds.begin(), _shardIds.end());
     }
 
-    IndexBounds ChunkManager::getIndexBoundsForQuery(const BSONObj& key, const CanonicalQuery* canonicalQuery) {
+    IndexBounds ChunkManager::getIndexBoundsForQuery(const BSONObj& key,
+                                                     const CanonicalQuery& canonicalQuery) {
         // $text is not allowed in planning since we don't have text index on mongos.
         //
         // TODO: Treat $text query as a no-op in planning. So with shard key {a: 1},
         //       the query { a: 2, $text: { ... } } will only target to {a: 2}.
-        if (QueryPlannerCommon::hasNode(canonicalQuery->root(), MatchExpression::TEXT)) {
+        if (QueryPlannerCommon::hasNode(canonicalQuery.root(), MatchExpression::TEXT)) {
             IndexBounds bounds;
             IndexBoundsBuilder::allValuesBounds(key, &bounds); // [minKey, maxKey]
             return bounds;
@@ -563,7 +559,7 @@ namespace {
         plannerParams.indices.push_back(indexEntry);
 
         OwnedPointerVector<QuerySolution> solutions;
-        Status status = QueryPlanner::plan(*canonicalQuery, plannerParams, &solutions.mutableVector());
+        Status status = QueryPlanner::plan(canonicalQuery, plannerParams, &solutions.mutableVector());
         uassert(status.code(), status.reason(), status.isOK());
 
         IndexBounds bounds;

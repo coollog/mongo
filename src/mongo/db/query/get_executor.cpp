@@ -480,14 +480,15 @@ namespace mongo {
             !collection->getIndexCatalog()->findIdIndex(txn)) {
 
             const WhereCallbackReal whereCallback(txn, collection->ns().db());
-            CanonicalQuery* cq;
-            Status status = CanonicalQuery::canonicalize(collection->ns(), unparsedQuery, &cq,
-                                                         whereCallback);
-            if (!status.isOK())
-                return status;
+            auto statusWithCQ = CanonicalQuery::canonicalize(collection->ns(), unparsedQuery,
+                                                             whereCallback);
+            if (!statusWithCQ.isOK()) {
+                return statusWithCQ.getStatus();
+            }
+            std::unique_ptr<CanonicalQuery> cq = std::move(statusWithCQ.getValue());
 
             // Takes ownership of 'cq'.
-            return getExecutor(txn, collection, cq, yieldPolicy, out, plannerOptions);
+            return getExecutor(txn, collection, cq.release(), yieldPolicy, out, plannerOptions);
         }
 
         LOG(2) << "Using idhack: " << unparsedQuery.toString();
@@ -1002,16 +1003,15 @@ namespace {
 
         const NamespaceString nss(request.ns);
         const WhereCallbackReal whereCallback(txn, nss.db());
-        CanonicalQuery* rawCanonicalQuery;
-        Status canonicalizeStatus = CanonicalQuery::canonicalize(request.ns,
-                                                                 request.query,
-                                                                 request.explain,
-                                                                 &rawCanonicalQuery,
-                                                                 whereCallback);
-        if (!canonicalizeStatus.isOK()) {
-            return canonicalizeStatus;
+
+        auto statusWithCQ = CanonicalQuery::canonicalize(request.ns,
+                                                         request.query,
+                                                         request.explain,
+                                                         whereCallback);
+        if (!statusWithCQ.isOK()) {
+            return statusWithCQ.getStatus();
         }
-        unique_ptr<CanonicalQuery> canonicalQuery(rawCanonicalQuery);
+        unique_ptr<CanonicalQuery> canonicalQuery = std::move(statusWithCQ.getValue());
 
         const size_t defaultPlannerOptions = 0;
         Status status = prepareExecution(txn, collection, ws.get(), canonicalQuery.get(),
@@ -1241,8 +1241,7 @@ namespace {
         if (!request.getQuery().isEmpty() || !request.getHint().isEmpty()) {
             // If query or hint is not empty, canonicalize the query before working with collection.
             typedef MatchExpressionParser::WhereCallback WhereCallback;
-            CanonicalQuery* rawCq = NULL;
-            Status canonStatus = CanonicalQuery::canonicalize(
+            auto statusWithCQ = CanonicalQuery::canonicalize(
                 request.getNs(),
                 request.getQuery(),
                 BSONObj(), // sort
@@ -1254,15 +1253,14 @@ namespace {
                 BSONObj(), // max
                 false, // snapshot
                 explain,
-                &rawCq,
                 collection ?
                     static_cast<const WhereCallback&>(WhereCallbackReal(txn,
                                                                         collection->ns().db())) :
                     static_cast<const WhereCallback&>(WhereCallbackNoop()));
-            if (!canonStatus.isOK()) {
-                return canonStatus;
+            if (!statusWithCQ.isOK()) {
+                return statusWithCQ.getStatus();
             }
-            cq.reset(rawCq);
+            cq = std::move(statusWithCQ.getValue());
         }
 
         if (!collection) {
@@ -1401,15 +1399,15 @@ namespace {
         // If there are no suitable indices for the distinct hack bail out now into regular planning
         // with no projection.
         if (plannerParams.indices.empty()) {
-            CanonicalQuery* cq;
-            Status status = CanonicalQuery::canonicalize(
-                                collection->ns().ns(), query, &cq, whereCallback);
-            if (!status.isOK()) {
-                return status;
+            auto statusWithCQ = CanonicalQuery::canonicalize(collection->ns().ns(), query,
+                                                             whereCallback);
+            if (!statusWithCQ.isOK()) {
+                return statusWithCQ.getStatus();
             }
+            std::unique_ptr<CanonicalQuery> cq = std::move(statusWithCQ.getValue());
 
             // Takes ownership of 'cq'.
-            return getExecutor(txn, collection, cq, yieldPolicy, out);
+            return getExecutor(txn, collection, cq.release(), yieldPolicy, out);
         }
 
         //
@@ -1422,18 +1420,16 @@ namespace {
         BSONObj projection = getDistinctProjection(field);
 
         // Apply a projection of the key.  Empty BSONObj() is for the sort.
-        CanonicalQuery* cq;
-        Status status = CanonicalQuery::canonicalize(collection->ns().ns(),
-                                                     query,
-                                                     BSONObj(),
-                                                     projection,
-                                                     &cq,
-                                                     whereCallback);
-        if (!status.isOK()) {
-            return status;
+        auto statusWithCQ = CanonicalQuery::canonicalize(collection->ns().ns(),
+                                                         query,
+                                                         BSONObj(),
+                                                         projection,
+                                                         whereCallback);
+        if (!statusWithCQ.isOK()) {
+            return statusWithCQ.getStatus();
         }
 
-        unique_ptr<CanonicalQuery> autoCq(cq);
+        unique_ptr<CanonicalQuery> cq = std::move(statusWithCQ.getValue());
 
         // If there's no query, we can just distinct-scan one of the indices.
         // Not every index in plannerParams.indices may be suitable. Refer to
@@ -1461,15 +1457,15 @@ namespace {
                    << ", planSummary: " << Explain::getPlanSummary(root);
 
             // Takes ownership of its arguments (except for 'collection').
-            return PlanExecutor::make(txn, ws, root, soln, autoCq.release(), collection,
+            return PlanExecutor::make(txn, ws, root, soln, cq.release(), collection,
                                       yieldPolicy, out);
         }
 
         // See if we can answer the query in a fast-distinct compatible fashion.
         vector<QuerySolution*> solutions;
-        status = QueryPlanner::plan(*cq, plannerParams, &solutions);
+        Status status = QueryPlanner::plan(*cq, plannerParams, &solutions);
         if (!status.isOK()) {
-            return getExecutor(txn, collection, autoCq.release(), yieldPolicy, out);
+            return getExecutor(txn, collection, cq.release(), yieldPolicy, out);
         }
 
         // We look for a solution that has an ixscan we can turn into a distinctixscan
@@ -1490,8 +1486,8 @@ namespace {
                 LOG(2) << "Using fast distinct: " << cq->toStringShort()
                        << ", planSummary: " << Explain::getPlanSummary(root);
 
-                // Takes ownership of 'ws', 'root', 'solutions[i]', and 'autoCq'.
-                return PlanExecutor::make(txn, ws, root, solutions[i], autoCq.release(),
+                // Takes ownership of 'ws', 'root', 'solutions[i]', and 'cq'.
+                return PlanExecutor::make(txn, ws, root, solutions[i], cq.release(),
                                           collection, yieldPolicy, out);
             }
         }
@@ -1504,15 +1500,15 @@ namespace {
         }
 
         // We drop the projection from the 'cq'.  Unfortunately this is not trivial.
-        status = CanonicalQuery::canonicalize(collection->ns().ns(), query, &cq, whereCallback);
-        if (!status.isOK()) {
-            return status;
+        statusWithCQ = CanonicalQuery::canonicalize(collection->ns().ns(), query, whereCallback);
+        if (!statusWithCQ.isOK()) {
+            return statusWithCQ.getStatus();
         }
 
-        autoCq.reset(cq);
+        cq = std::move(statusWithCQ.getValue());
 
-        // Takes ownership of 'autoCq'.
-        return getExecutor(txn, collection, autoCq.release(), yieldPolicy, out);
+        // Takes ownership of 'cq'.
+        return getExecutor(txn, collection, cq.release(), yieldPolicy, out);
     }
 
 }  // namespace mongo

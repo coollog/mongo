@@ -108,9 +108,9 @@ namespace mongo {
        set your db SavedContext first
     */
     bool Helpers::findOne(OperationContext* txn,
-                          Collection* collection, 
-                          const BSONObj &query, 
-                          BSONObj& result, 
+                          Collection* collection,
+                          const BSONObj &query,
+                          BSONObj& result,
                           bool requireIndex) {
         RecordId loc = findOne( txn, collection, query, requireIndex );
         if ( loc.isNull() )
@@ -129,18 +129,18 @@ namespace mongo {
         if ( !collection )
             return RecordId();
 
-        CanonicalQuery* cq;
         const WhereCallbackReal whereCallback(txn, collection->ns().db());
 
-        massert(17244, "Could not canonicalize " + query.toString(),
-            CanonicalQuery::canonicalize(collection->ns(), query, &cq, whereCallback).isOK());
+        auto statusWithCQ = CanonicalQuery::canonicalize(collection->ns(), query, whereCallback);
+        massert(17244, "Could not canonicalize " + query.toString(), statusWithCQ.isOK());
+        unique_ptr<CanonicalQuery> cq = std::move(statusWithCQ.getValue());
 
         PlanExecutor* rawExec;
         size_t options = requireIndex ? QueryPlannerParams::NO_TABLE_SCAN : QueryPlannerParams::DEFAULT;
         massert(17245, "Could not get executor for query " + query.toString(),
                 getExecutor(txn,
                             collection,
-                            cq,
+                            cq.release(),
                             PlanExecutor::YIELD_MANUAL,
                             &rawExec,
                             options).isOK());
@@ -351,7 +351,7 @@ namespace mongo {
                << " with write concern: " << writeConcern.toBSON() << endl;
 
         long long numDeleted = 0;
-        
+
         Milliseconds millisWaitingForReplication{0};
 
         while ( 1 ) {
@@ -465,12 +465,12 @@ namespace mongo {
                 millisWaitingForReplication += replStatus.duration;
             }
         }
-        
+
         if (writeConcern.shouldWaitForOtherNodes())
             log(LogComponent::kSharding)
                   << "Helpers::removeRangeUnlocked time spent waiting for replication: "
                   << durationCount<Milliseconds>(millisWaitingForReplication) << "ms" << endl;
-        
+
         MONGO_LOG_COMPONENT(1, LogComponent::kSharding)
                << "end removal of " << min << " to " << max << " in " << ns
                << " (took " << rangeRemoveTimer.millis() << "ms)" << endl;
@@ -578,7 +578,7 @@ namespace mongo {
         deleteObjects(txn, context.db(), ns, BSONObj(), PlanExecutor::YIELD_MANUAL, false);
     }
 
-    Helpers::RemoveSaver::RemoveSaver( const string& a , const string& b , const string& why) 
+    Helpers::RemoveSaver::RemoveSaver( const string& a , const string& b , const string& why)
         : _out(0) {
         static int NUM = 0;
 
@@ -610,7 +610,7 @@ namespace mongo {
             _out = new ofstream();
             _out->open( _file.string().c_str() , ios_base::out | ios_base::binary );
             if ( ! _out->good() ) {
-                error() << "couldn't create file: " << _file.string() << 
+                error() << "couldn't create file: " << _file.string() <<
                     " for remove saving" << endl;
                 delete _out;
                 _out = 0;

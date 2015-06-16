@@ -649,7 +649,7 @@ namespace mongo {
         BSONObj original;
 
         if (cq) {
-            Status status = driver->populateDocumentWithQueryFields(cq, immutablePaths, *doc);
+            Status status = driver->populateDocumentWithQueryFields(*cq, immutablePaths, *doc);
             if (!status.isOK()) {
                 return status;
             }

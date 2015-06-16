@@ -235,10 +235,10 @@ namespace mongo {
                              BSONObj());
         params.indices.push_back(sortOrder);
 
-        CanonicalQuery* rawQueryForSort;
-        verify(CanonicalQuery::canonicalize(
-                "fake_ns", queryObj, &rawQueryForSort, WhereCallbackNoop()).isOK());
-        unique_ptr<CanonicalQuery> queryForSort(rawQueryForSort);
+        auto statusWithQueryForSort = CanonicalQuery::canonicalize("fake_ns", queryObj,
+                                                                   WhereCallbackNoop());
+        verify(statusWithQueryForSort.isOK());
+        unique_ptr<CanonicalQuery> queryForSort = std::move(statusWithQueryForSort.getValue());
 
         vector<QuerySolution*> solns;
         LOG(5) << "Sort stage: Planning to obtain bounds for sort." << endl;

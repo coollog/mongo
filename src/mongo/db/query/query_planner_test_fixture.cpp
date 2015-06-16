@@ -157,17 +157,12 @@ namespace mongo {
         // Clean up any previous state from a call to runQueryFull
         solns.clear();
 
-        {
-            CanonicalQuery* rawCq;
-            Status s = CanonicalQuery::canonicalize(ns, query, sort, proj, skip, limit, hint,
-                                                    minObj, maxObj, snapshot,
-                                                    false, // explain
-                                                    &rawCq);
-            ASSERT_OK(s);
-            cq.reset(rawCq);
-        }
+        auto statusWithCQ = CanonicalQuery::canonicalize(ns, query, sort, proj, skip, limit, hint,
+                                                         minObj, maxObj, snapshot,
+                                                         false); // explain
+        ASSERT_OK(statusWithCQ.getStatus());
 
-        ASSERT_OK(QueryPlanner::plan(*cq, params, &solns.mutableVector()));
+        ASSERT_OK(QueryPlanner::plan(*statusWithCQ.getValue(), params, &solns.mutableVector()));
     }
 
     void QueryPlannerTest::runInvalidQuery(const BSONObj& query) {
@@ -219,17 +214,12 @@ namespace mongo {
                                                bool snapshot) {
         solns.clear();
 
-        {
-            CanonicalQuery* rawCq;
-            Status s = CanonicalQuery::canonicalize(ns, query, sort, proj, skip, limit, hint,
-                                                    minObj, maxObj, snapshot,
-                                                    false, // explain
-                                                    &rawCq);
-            ASSERT_OK(s);
-            cq.reset(rawCq);
-        }
+        auto statusWithCQ = CanonicalQuery::canonicalize(ns, query, sort, proj, skip, limit, hint,
+                                                         minObj, maxObj, snapshot,
+                                                         false); // explain
+        ASSERT_OK(statusWithCQ.getStatus());
 
-        Status s = QueryPlanner::plan(*cq, params, &solns.mutableVector());
+        Status s = QueryPlanner::plan(*statusWithCQ.getValue(), params, &solns.mutableVector());
         ASSERT_NOT_OK(s);
     }
 
@@ -240,13 +230,11 @@ namespace mongo {
         std::unique_ptr<LiteParsedQuery> lpq(
             assertGet(LiteParsedQuery::fromFindCommand(ns, cmdObj, isExplain)));
 
-        CanonicalQuery* rawCq;
         WhereCallbackNoop whereCallback;
-        Status canonStatus = CanonicalQuery::canonicalize(lpq.release(), &rawCq, whereCallback);
-        ASSERT_OK(canonStatus);
-        cq.reset(rawCq);
+        auto statusWithCQ = CanonicalQuery::canonicalize(lpq.release(), whereCallback);
+        ASSERT_OK(statusWithCQ.getStatus());
 
-        Status s = QueryPlanner::plan(*cq, params, &solns.mutableVector());
+        Status s = QueryPlanner::plan(*statusWithCQ.getValue(), params, &solns.mutableVector());
         ASSERT_OK(s);
     }
 

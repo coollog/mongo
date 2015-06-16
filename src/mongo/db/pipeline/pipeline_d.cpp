@@ -48,6 +48,7 @@ namespace mongo {
     using boost::intrusive_ptr;
     using std::shared_ptr;
     using std::string;
+    using std::unique_ptr;
 
 namespace {
     class MongodImplementation final : public DocumentSourceNeedsMongod::MongodInterface {
@@ -185,22 +186,21 @@ namespace {
         const WhereCallbackReal whereCallback(pExpCtx->opCtx, pExpCtx->ns.db());
 
         if (sortStage) {
-            CanonicalQuery* cq;
-            Status status =
+            auto statusWithCQ =
                 CanonicalQuery::canonicalize(pExpCtx->ns,
                                              queryObj,
                                              sortObj,
                                              projectionForQuery,
-                                             &cq,
                                              whereCallback);
+            unique_ptr<CanonicalQuery> cq = std::move(statusWithCQ.getValue());
 
             PlanExecutor* rawExec;
-            if (status.isOK() && getExecutor(txn,
-                                             collection,
-                                             cq,
-                                             PlanExecutor::YIELD_AUTO,
-                                             &rawExec,
-                                             runnerOptions).isOK()) {
+            if (statusWithCQ.isOK() && getExecutor(txn,
+                                                   collection,
+                                                   cq.release(),
+                                                   PlanExecutor::YIELD_AUTO,
+                                                   &rawExec,
+                                                   runnerOptions).isOK()) {
                 // success: The PlanExecutor will handle sorting for us using an index.
                 exec.reset(rawExec);
                 sortInRunner = true;
@@ -215,19 +215,18 @@ namespace {
 
         if (!exec.get()) {
             const BSONObj noSort;
-            CanonicalQuery* cq;
-            uassertStatusOK(
-                CanonicalQuery::canonicalize(pExpCtx->ns,
-                                             queryObj,
-                                             noSort,
-                                             projectionForQuery,
-                                             &cq,
-                                             whereCallback));
+            auto statusWithCQ = CanonicalQuery::canonicalize(pExpCtx->ns,
+                                                             queryObj,
+                                                             noSort,
+                                                             projectionForQuery,
+                                                             whereCallback);
+            std::unique_ptr<CanonicalQuery> cq = std::move(statusWithCQ.getValue());
+            uassertStatusOK(statusWithCQ.getStatus());
 
             PlanExecutor* rawExec;
             uassertStatusOK(getExecutor(txn,
                                         collection,
-                                        cq,
+                                        cq.release(),
                                         PlanExecutor::YIELD_AUTO,
                                         &rawExec,
                                         runnerOptions));
