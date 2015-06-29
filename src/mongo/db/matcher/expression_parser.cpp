@@ -217,19 +217,8 @@ StatusWithMatchExpression MatchExpressionParser::_parseSubField(const BSONObj& c
             return StatusWithMatchExpression(temp2.release());
         }
 
-        case BSONObj::opTYPE: {
-            if (!e.isNumber())
-                return StatusWithMatchExpression(ErrorCodes::BadValue, "$type has to be a number");
-            int type = e.numberInt();
-            if (e.type() != NumberInt && type != e.number())
-                type = -1;
-            std::unique_ptr<TypeMatchExpression> temp(new TypeMatchExpression());
-            Status s = temp->init(name, type);
-            if (!s.isOK())
-                return StatusWithMatchExpression(s);
-            return StatusWithMatchExpression(temp.release());
-        }
-
+        case BSONObj::opTYPE:
+            return _parseType(name, e);
 
         case BSONObj::opMOD:
             return _parseMOD(name, e);
@@ -612,6 +601,47 @@ Status MatchExpressionParser::_parseArrayFilterEntries(ArrayFilterEntries* entri
         }
     }
     return Status::OK();
+}
+
+StatusWithMatchExpression MatchExpressionParser::_parseType(const char* name,
+                                                            const BSONElement& e) {
+    if (!e.isNumber() && e.type() != String) {
+        return StatusWithMatchExpression(ErrorCodes::TypeMismatch,
+                                         "$type is not a number or a string");
+    }
+
+    std::unique_ptr<TypeMatchExpression> temp(new TypeMatchExpression());
+
+    BSONType typeInt;
+
+    // The element can be a number (the BSON type number) of a string representing the name
+    // of the type.
+    if (e.isNumber()) {
+        typeInt = (BSONType)e.numberInt();
+        if (e.type() != NumberInt && typeInt != e.number()) {
+            typeInt = (BSONType)-1;
+        }
+    } else {
+        std::string typeAlias = e.str();
+
+        // Search the string-int map for the typeAlias (case-sensitive).
+        std::unordered_map<std::string, BSONType>::const_iterator it =
+            TypeMatchExpression::typeAliasMap.find(typeAlias);
+        if (it == TypeMatchExpression::typeAliasMap.end()) {
+            std::stringstream ss;
+            ss << "unknown string alias for $type: " << typeAlias;
+            return StatusWithMatchExpression(ErrorCodes::BadValue, ss.str());
+        } else {
+            typeInt = it->second;
+        }
+    }
+
+    Status s = temp->init(name, typeInt);
+    if (!s.isOK()) {
+        return StatusWithMatchExpression(s);
+    }
+
+    return StatusWithMatchExpression(temp.release());
 }
 
 StatusWithMatchExpression MatchExpressionParser::_parseElemMatch(const char* name,
