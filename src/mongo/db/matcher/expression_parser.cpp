@@ -623,6 +623,63 @@ StatusWithMatchExpression MatchExpressionParser::_parseType(const char* name,
     } else {
         std::string typeAlias = elt.str();
 
+        // If typeAlias is 'number' or 'simple', make the OR stage.
+        if (typeAlias == "number" || typeAlias == "simple") {
+            std::unique_ptr<OrMatchExpression> orTemp = stdx::make_unique<OrMatchExpression>();
+
+            std::unique_ptr<TypeMatchExpression> typeInt = stdx::make_unique<TypeMatchExpression>();
+            std::unique_ptr<TypeMatchExpression> typeLong = stdx::make_unique<TypeMatchExpression>();
+            std::unique_ptr<TypeMatchExpression> typeDouble = stdx::make_unique<TypeMatchExpression>();
+
+            Status sInt = typeInt->init(name, NumberInt);
+            if (!sInt.isOK()) {
+                return sInt;
+            }
+            Status sLong = typeLong->init(name, NumberLong);
+            if (!sLong.isOK()) {
+                return sLong;
+            }
+            Status sDouble = typeDouble->init(name, NumberDouble);
+            if (!sDouble.isOK()) {
+                return sDouble;
+            }
+
+            orTemp->add(typeInt.release());
+            orTemp->add(typeLong.release());
+            orTemp->add(typeDouble.release());
+
+            if (typeAlias == "simple") { // Simple has some more types
+                std::unique_ptr<TypeMatchExpression> typeString = stdx::make_unique<TypeMatchExpression>();
+                std::unique_ptr<TypeMatchExpression> typeBool = stdx::make_unique<TypeMatchExpression>();
+                std::unique_ptr<TypeMatchExpression> typeDate = stdx::make_unique<TypeMatchExpression>();
+                std::unique_ptr<TypeMatchExpression> typejstOID = stdx::make_unique<TypeMatchExpression>();
+
+                Status sString = typeString->init(name, mongo::String);
+                if (!sString.isOK()) {
+                    return sString;
+                }
+                Status sBool = typeBool->init(name, mongo::Bool);
+                if (!sBool.isOK()) {
+                    return sBool;
+                }
+                Status sDate = typeDate->init(name, mongo::Date);
+                if (!sDate.isOK()) {
+                    return sDate;
+                }
+                Status sjstOID = typejstOID->init(name, jstOID);
+                if (!sjstOID.isOK()) {
+                    return sjstOID;
+                }
+
+                orTemp->add(typeString.release());
+                orTemp->add(typeBool.release());
+                orTemp->add(typeDate.release());
+                orTemp->add(typejstOID.release());
+            }
+
+            return orTemp.release();
+        }
+
         // Search the string-int map for the typeAlias (case-sensitive).
         std::unordered_map<std::string, BSONType>::const_iterator it =
             TypeMatchExpression::typeAliasMap.find(typeAlias);
