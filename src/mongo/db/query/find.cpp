@@ -112,14 +112,14 @@ ScopedRecoveryUnitSwapper::~ScopedRecoveryUnitSwapper() {
  * If ntoreturn is non-zero, the we stop building the first batch once we either have ntoreturn
  * results, or when the result set exceeds 4 MB.
  */
-bool enoughForFirstBatch(const LiteParsedQuery& pq, int numDocs, int bytesBuffered) {
+bool enoughForFirstBatch(const LiteParsedQuery& pq, long long numDocs, int bytesBuffered) {
     if (!pq.getBatchSize()) {
         return (bytesBuffered > 1024 * 1024) || numDocs >= LiteParsedQuery::kDefaultBatchSize;
     }
     return numDocs >= *pq.getBatchSize() || bytesBuffered > MaxBytesToReturnToClientAtOnce;
 }
 
-bool enoughForGetMore(int ntoreturn, int numDocs, int bytesBuffered) {
+bool enoughForGetMore(long long ntoreturn, long long numDocs, int bytesBuffered) {
     return (ntoreturn && numDocs >= ntoreturn) || (bytesBuffered > MaxBytesToReturnToClientAtOnce);
 }
 
@@ -178,8 +178,8 @@ bool shouldSaveCursorGetMore(PlanExecutor::ExecState finalState,
 void beginQueryOp(OperationContext* txn,
                   const NamespaceString& nss,
                   const BSONObj& queryObj,
-                  int ntoreturn,
-                  int ntoskip) {
+                  long long ntoreturn,
+                  long long ntoskip) {
     auto curop = CurOp::get(txn);
     curop->debug().query = queryObj;
     curop->debug().ntoreturn = ntoreturn;
@@ -192,7 +192,7 @@ void beginQueryOp(OperationContext* txn,
 void endQueryOp(OperationContext* txn,
                 const PlanExecutor& exec,
                 int dbProfilingLevel,
-                int numResults,
+                long long numResults,
                 CursorId cursorId) {
     auto curop = CurOp::get(txn);
 
@@ -245,7 +245,7 @@ void endQueryOp(OperationContext* txn,
  */
 QueryResult::View getMore(OperationContext* txn,
                           const char* ns,
-                          int ntoreturn,
+                          long long ntoreturn,
                           long long cursorid,
                           int pass,
                           bool& exhaust,
@@ -323,7 +323,7 @@ QueryResult::View getMore(OperationContext* txn,
     // These are set in the QueryResult msg we return.
     int resultFlags = ResultFlag_AwaitCapable;
 
-    int numResults = 0;
+    long long numResults = 0;
     int startingResult = 0;
 
     const int InitialBufSize = 512 + sizeof(QueryResult::Value) + MaxBytesToReturnToClientAtOnce;
@@ -586,7 +586,7 @@ std::string runQuery(OperationContext* txn,
     bb.skip(sizeof(QueryResult::Value));
 
     // How many results have we obtained from the executor?
-    int numResults = 0;
+    long long numResults = 0;
 
     // If we're replaying the oplog, we save the last time that we read.
     Timestamp slaveReadTill;

@@ -96,7 +96,7 @@ TEST(LiteParsedQueryTest, GetFilter) {
 TEST(LiteParsedQueryTest, NumToReturn) {
     unique_ptr<LiteParsedQuery> lpq(assertGet(LiteParsedQuery::makeAsOpQuery(testns,
                                                                              5,
-                                                                             6,
+                                                                             8000000000,
                                                                              9,
                                                                              BSON("x" << 5),
                                                                              BSONObj(),
@@ -107,14 +107,14 @@ TEST(LiteParsedQueryTest, NumToReturn) {
                                                                              false,     // snapshot
                                                                              false)));  // explain
 
-    ASSERT_EQUALS(6, lpq->getBatchSize());
+    ASSERT_EQUALS(8000000000, *lpq->getBatchSize());
     ASSERT(lpq->wantMore());
 }
 
 TEST(LiteParsedQueryTest, NumToReturnNegative) {
     unique_ptr<LiteParsedQuery> lpq(assertGet(LiteParsedQuery::makeAsOpQuery(testns,
                                                                              5,
-                                                                             -6,
+                                                                             -8000000000,
                                                                              9,
                                                                              BSON("x" << 5),
                                                                              BSONObj(),
@@ -125,8 +125,41 @@ TEST(LiteParsedQueryTest, NumToReturnNegative) {
                                                                              false,     // snapshot
                                                                              false)));  // explain
 
-    ASSERT_EQUALS(6, lpq->getBatchSize());
+    ASSERT_EQUALS(8000000000, *lpq->getBatchSize());
     ASSERT(!lpq->wantMore());
+}
+
+TEST(LiteParsedQueryTest, NumToSkip) {
+    unique_ptr<LiteParsedQuery> lpq(assertGet(LiteParsedQuery::makeAsOpQuery(testns,
+                                                                             8000000000,
+                                                                             5,
+                                                                             9,
+                                                                             BSON("x" << 5),
+                                                                             BSONObj(),
+                                                                             BSONObj(),
+                                                                             BSONObj(),
+                                                                             BSONObj(),
+                                                                             BSONObj(),
+                                                                             false,     // snapshot
+                                                                             false)));  // explain
+
+    ASSERT_EQUALS(8000000000, lpq->getSkip());
+}
+
+TEST(LiteParsedQueryTest, NumToSkipNegative) {
+    auto statusWithLPQ = LiteParsedQuery::makeAsOpQuery(testns,
+                                                        -8000000000,
+                                                        5,
+                                                        9,
+                                                        BSON("x" << 5),
+                                                        BSONObj(),
+                                                        BSONObj(),
+                                                        BSONObj(),
+                                                        BSONObj(),
+                                                        BSONObj(),
+                                                        false,   // snapshot
+                                                        false);  // explain
+    ASSERT_NOT_OK(statusWithLPQ.getStatus());
 }
 
 TEST(LiteParsedQueryTest, MinFieldsNotPrefixOfMax) {
@@ -257,13 +290,13 @@ TEST(LiteParsedQueryTest, ForbidMetaSortOnFieldWithoutMetaProject) {
 
 TEST(LiteParsedQueryTest, MakeFindCmd) {
     auto result = LiteParsedQuery::makeAsFindCmd(
-        NamespaceString("test.ns"), BSON("x" << 1), BSON("y" << -1), 2);
+        NamespaceString("test.ns"), BSON("x" << 1), BSON("y" << -1), 8000000000);
     ASSERT_OK(result.getStatus());
 
     auto&& lpq = result.getValue();
     ASSERT_EQUALS("test.ns", lpq->ns());
     ASSERT_EQUALS(BSON("x" << 1), lpq->getFilter());
-    ASSERT_EQUALS(2, lpq->getLimit());
+    ASSERT_EQUALS(8000000000, *lpq->getLimit());
 
     ASSERT_EQUALS(BSONObj(), lpq->getProj());
     ASSERT_EQUALS(BSON("y" << -1), lpq->getSort());
@@ -332,8 +365,10 @@ TEST(LiteParsedQueryTest, MakeFindCmdNoLimit) {
 }
 
 TEST(LiteParsedQueryTest, MakeFindCmdBadLimit) {
-    auto status = LiteParsedQuery::makeAsFindCmd(
-                      NamespaceString("test.ns"), BSON("x" << 1), BSONObj(), 0).getStatus();
+    auto status = LiteParsedQuery::makeAsFindCmd(NamespaceString("test.ns"),
+                                                 BSON("x" << 1),
+                                                 BSONObj(),
+                                                 static_cast<long long>(0)).getStatus();
     ASSERT_NOT_OK(status);
     ASSERT_EQUALS(ErrorCodes::BadValue, status.code());
 }
@@ -519,9 +554,9 @@ TEST(LiteParsedQueryTest, ParseFromCommandAllNonOptionFields) {
         "sort: {b: 1},"
         "projection: {c: 1},"
         "hint: {d: 1},"
-        "limit: 3,"
-        "skip: 5,"
-        "batchSize: 90,"
+        "limit: 16000000000,"
+        "skip: 8000000000,"
+        "batchSize: 12000000000,"
         "singleBatch: false}");
     const NamespaceString nss("test.testns");
     bool isExplain = false;
@@ -537,9 +572,9 @@ TEST(LiteParsedQueryTest, ParseFromCommandAllNonOptionFields) {
     ASSERT_EQUALS(0, expectedProj.woCompare(lpq->getProj()));
     BSONObj expectedHint = BSON("d" << 1);
     ASSERT_EQUALS(0, expectedHint.woCompare(lpq->getHint()));
-    ASSERT_EQUALS(3, lpq->getLimit());
-    ASSERT_EQUALS(5, lpq->getSkip());
-    ASSERT_EQUALS(90, lpq->getBatchSize());
+    ASSERT_EQUALS(16000000000, *lpq->getLimit());
+    ASSERT_EQUALS(8000000000, lpq->getSkip());
+    ASSERT_EQUALS(12000000000, *lpq->getBatchSize());
     ASSERT(lpq->wantMore());
 }
 
@@ -828,7 +863,7 @@ TEST(LiteParsedQueryTest, ParseFromCommandBatchSizeZero) {
         assertGet(LiteParsedQuery::makeFromFindCommand(nss, cmdObj, isExplain)));
 
     ASSERT(lpq->getBatchSize());
-    ASSERT_EQ(0, lpq->getBatchSize());
+    ASSERT_EQ(0, *lpq->getBatchSize());
 
     ASSERT(!lpq->getLimit());
 }
