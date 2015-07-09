@@ -65,6 +65,4 @@ var blacklist = [
     'yield_and_sorted.js', // stagedebug can only be run against a standalone mongod
 ].map(function(file) { return dir + '/' + file; });
 
-runWorkloadsSerially(ls(dir).filter(function(file) {
-    return !Array.contains(blacklist, file);
-}), { sharded: true, replication: true, useLegacyConfigServers: false });
+runWorkloadsSerially(['jstests/concurrency/fsm_workloads/agg_base.js'], { sharded: true, replication: true, useLegacyConfigServers: false });
