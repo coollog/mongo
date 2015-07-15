@@ -840,15 +840,6 @@ bool receivedGetMore(OperationContext* txn, DbResponse& dbresponse, Message& m, 
 
         msgdata = getMore(txn, ns, ntoreturn, cursorid, &exhaust, &isCursorAuthorized);
     } catch (AssertionException& e) {
-        if (isCursorAuthorized) {
-            // If a cursor with id 'cursorid' was authorized, it may have been advanced
-            // before an exception terminated processGetMore.  Erase the ClientCursor
-            // because it may now be out of sync with the client's iteration state.
-            // SERVER-7952
-            // TODO Temporary code, see SERVER-4563 for a cleanup overview.
-            CursorManager::eraseCursorGlobal(txn, cursorid);
-        }
-
         BSONObjBuilder err;
         e.getInfo().append(err);
         BSONObj errObj = err.done();

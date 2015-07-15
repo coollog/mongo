@@ -145,6 +145,12 @@ StatusWith<std::unique_ptr<PlanExecutor>> getOplogStartHack(OperationContext* tx
                                                             std::unique_ptr<CanonicalQuery> cq);
 
 /**
+ * Called via a ScopeGuard on early return in order to ensure that the ClientCursor gets
+ * cleaned up properly. Called in getMore() and GetMoreCmd::run().
+ */
+void cleanupCursor(OperationContext* txn, ClientCursorPin* ccPin, const NamespaceString& nss);
+
+/**
  * Called from the getMore entry point in ops/query.cpp.
  */
 QueryResult::View getMore(OperationContext* txn,

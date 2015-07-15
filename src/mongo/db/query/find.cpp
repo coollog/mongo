@@ -60,6 +60,7 @@
 #include "mongo/util/fail_point_service.h"
 #include "mongo/util/log.h"
 #include "mongo/util/mongoutils/str.h"
+#include "mongo/util/scopeguard.h"
 
 namespace mongo {
 
@@ -290,6 +291,22 @@ void generateBatch(int ntoreturn,
 
 }  // namespace
 
+void cleanupCursor(OperationContext* txn, ClientCursorPin* ccPin, const NamespaceString& nss) {
+    ClientCursor* cursor = ccPin->c();
+
+    std::unique_ptr<Lock::DBLock> unpinDBLock;
+    std::unique_ptr<Lock::CollectionLock> unpinCollLock;
+
+    // In order to deregister a cursor, we need to be holding the DB + collection lock and
+    // if the cursor is aggregation, we release these locks.
+    if (cursor->isAggCursor()) {
+        unpinDBLock = make_unique<Lock::DBLock>(txn->lockState(), nss.db(), MODE_IS);
+        unpinCollLock = make_unique<Lock::CollectionLock>(txn->lockState(), nss.ns(), MODE_IS);
+    }
+
+    ccPin->deleteUnderlying();
+}
+
 /**
  * Called by db/instance.cpp.  This is the getMore entry point.
  */
@@ -392,6 +409,9 @@ QueryResult::View getMore(OperationContext* txn,
                 ns == cc->ns());
         *isCursorAuthorized = true;
 
+        // On early return, get rid of the cursor.
+        ScopeGuard cursorFreer = MakeGuard(&cleanupCursor, txn, &ccPin, nss);
+
         // Restore the RecoveryUnit if we need to.
         if (txn->getClient()->isInDirectClient()) {
             if (cc->hasRecoveryUnit())
@@ -469,6 +489,10 @@ QueryResult::View getMore(OperationContext* txn,
             // way, attempt to generate another batch of results.
             generateBatch(ntoreturn, cc, &bb, &numResults, &slaveReadTill, &state);
         }
+
+        // We dismiss the ScopeGuard for the ClientCursor cleanup since we are past all possible
+        // early returns.
+        cursorFreer.Dismiss();
 
         // In order to deregister a cursor, we need to be holding the DB + collection lock and
         // if the cursor is aggregation, we release these locks.

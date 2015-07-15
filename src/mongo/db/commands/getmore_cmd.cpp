@@ -229,7 +229,7 @@ public:
         }
 
         // On early return, get rid of the cursor.
-        ScopeGuard cursorFreer = MakeGuard(&GetMoreCmd::cleanupCursor, txn, &ccPin, request);
+        ScopeGuard cursorFreer = MakeGuard(&cleanupCursor, txn, &ccPin, request.nss);
 
         if (!cursor->hasRecoveryUnit()) {
             // Start using a new RecoveryUnit.
@@ -407,27 +407,6 @@ public:
         }
 
         return Status::OK();
-    }
-
-    /**
-     * Called via a ScopeGuard on early return in order to ensure that the ClientCursor gets
-     * cleaned up properly.
-     */
-    static void cleanupCursor(OperationContext* txn,
-                              ClientCursorPin* ccPin,
-                              const GetMoreRequest& request) {
-        ClientCursor* cursor = ccPin->c();
-
-        std::unique_ptr<Lock::DBLock> unpinDBLock;
-        std::unique_ptr<Lock::CollectionLock> unpinCollLock;
-
-        if (cursor->isAggCursor()) {
-            unpinDBLock.reset(new Lock::DBLock(txn->lockState(), request.nss.db(), MODE_IS));
-            unpinCollLock.reset(
-                new Lock::CollectionLock(txn->lockState(), request.nss.ns(), MODE_IS));
-        }
-
-        ccPin->deleteUnderlying();
     }
 
 } getMoreCmd;
