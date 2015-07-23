@@ -251,7 +251,7 @@ protected:
         fassertFailed(16940);
     }
 
-    BSONObj getQuery(const BSONObj& cmdObj) {
+    static BSONObj getQuery(const BSONObj& cmdObj) {
         if (cmdObj["query"].type() == Object)
             return cmdObj["query"].embeddedObject();
         if (cmdObj["q"].type() == Object)
